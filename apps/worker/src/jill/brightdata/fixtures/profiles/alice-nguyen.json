@@ -1,0 +1,17 @@
+{
+  "linkedin_url": "https://linkedin.com/in/alice-nguyen",
+  "full_name": "Alice Nguyen",
+  "headline": "Founding Voice AI Engineer @ Vapi",
+  "location": "San Francisco, CA",
+  "current_company": "Vapi",
+  "current_title": "Founding Engineer",
+  "started_at": "2026-05-15",
+  "experiences": [
+    {"company": "Vapi", "title": "Founding Engineer", "start": "2026-05-15", "end": null},
+    {"company": "Retell AI", "title": "Voice Agents Engineer", "start": "2024-02-01", "end": "2026-05-01"},
+    {"company": "Twilio", "title": "Software Engineer", "start": "2021-06-01", "end": "2024-01-15"},
+    {"company": "EchoLabs (acquired)", "title": "Co-founder & CTO", "start": "2018-09-01", "end": "2021-05-01"}
+  ],
+  "skills": ["Python", "WebRTC", "Realtime Audio", "LLMs", "Speech-to-Text", "Go"],
+  "education": [{"school": "UC Berkeley", "degree": "BS Computer Science"}]
+}

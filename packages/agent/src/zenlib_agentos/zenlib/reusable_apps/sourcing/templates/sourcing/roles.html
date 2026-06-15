@@ -1,0 +1,29 @@
+{% extends "sourcing/base.html" %}
+{% block body %}
+  <h1>Roles</h1>
+  <p class="sub">Openings Jill is sourcing for.</p>
+
+  {% if not tenant %}
+    <div class="card">No active tenant. Create one, then open <code>?tenant=&lt;id&gt;</code>.</div>
+  {% else %}
+    {% if tenants %}
+      <p class="muted" style="margin-top:-12px;margin-bottom:18px">Workspace:
+        {% for t in tenants %}
+          <a href="/ui/sourcing/?tenant={{ t.id }}">{{ t.name }}</a>{% if not forloop.last %} · {% endif %}
+        {% endfor %}
+      </p>
+    {% endif %}
+    {% for role in roles %}
+      <div class="card row">
+        <span class="score">{{ role.title|slice:":1" }}</span>
+        <div style="flex:1">
+          <div class="name"><a href="/ui/sourcing/roles/{{ role.id }}/?tenant={{ tenant.id }}">{{ role.title }}</a></div>
+          <div class="muted">status: {{ role.get_status_display }}{% if role.icp.rubric %} · {{ role.icp.rubric|length }}-criterion rubric{% endif %}</div>
+        </div>
+        <a class="btn" href="/ui/sourcing/roles/{{ role.id }}/?tenant={{ tenant.id }}">View leads →</a>
+      </div>
+    {% empty %}
+      <div class="card">No roles yet. Create one with <code>jill role create</code>.</div>
+    {% endfor %}
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,33 @@
+{
+  "name": "Retell AI",
+  "linkedin_url": "https://linkedin.com/company/retell-ai",
+  "employees": [
+    {
+      "linkedin_url": "https://linkedin.com/in/frank-li",
+      "full_name": "Frank Li",
+      "headline": "Voice Agents Engineer @ Retell AI",
+      "current_title": "Software Engineer",
+      "current_company": "Retell AI",
+      "started_at": "2026-05-01",
+      "location": "San Francisco, CA"
+    },
+    {
+      "linkedin_url": "https://linkedin.com/in/grace-kim",
+      "full_name": "Grace Kim",
+      "headline": "Staff Engineer @ Retell AI",
+      "current_title": "Staff Engineer",
+      "current_company": "Retell AI",
+      "started_at": "2022-09-01",
+      "location": "Seattle, WA"
+    },
+    {
+      "linkedin_url": "https://linkedin.com/in/alice-nguyen",
+      "full_name": "Alice Nguyen",
+      "headline": "Voice AI Engineer (prev @ Retell AI)",
+      "current_title": "Founding Engineer",
+      "current_company": "Vapi",
+      "started_at": "2024-02-01",
+      "location": "San Francisco, CA"
+    }
+  ]
+}

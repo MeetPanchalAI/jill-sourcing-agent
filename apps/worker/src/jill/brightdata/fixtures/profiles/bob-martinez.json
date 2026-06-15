@@ -1,0 +1,15 @@
+{
+  "linkedin_url": "https://linkedin.com/in/bob-martinez",
+  "full_name": "Bob Martinez",
+  "headline": "Speech & Realtime Infra @ Vapi",
+  "location": "Remote (US)",
+  "current_company": "Vapi",
+  "current_title": "Senior Software Engineer",
+  "started_at": "2026-04-20",
+  "experiences": [
+    {"company": "Vapi", "title": "Senior Software Engineer", "start": "2026-04-20", "end": null},
+    {"company": "AssemblyAI", "title": "Backend Engineer", "start": "2022-03-01", "end": "2026-04-10"}
+  ],
+  "skills": ["Python", "Rust", "Realtime Audio", "Kubernetes", "gRPC"],
+  "education": [{"school": "IIT Bombay", "degree": "B.Tech Computer Science"}]
+}

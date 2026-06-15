@@ -1,0 +1,15 @@
+{
+  "linkedin_url": "https://linkedin.com/in/dave-okoro",
+  "full_name": "Dave Okoro",
+  "headline": "Engineer @ Vapi",
+  "location": "New York, NY",
+  "current_company": "Vapi",
+  "current_title": "Software Engineer",
+  "started_at": "2026-06-04",
+  "experiences": [
+    {"company": "Vapi", "title": "Software Engineer", "start": "2026-06-04", "end": null},
+    {"company": "Stripe", "title": "Frontend Engineer", "start": "2023-01-01", "end": "2026-05-20"}
+  ],
+  "skills": ["TypeScript", "React", "Node.js", "GraphQL"],
+  "education": [{"school": "NYU", "degree": "BS Computer Science"}]
+}

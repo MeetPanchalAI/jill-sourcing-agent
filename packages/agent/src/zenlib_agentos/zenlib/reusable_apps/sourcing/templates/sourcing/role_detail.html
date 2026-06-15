@@ -1,0 +1,129 @@
+{% extends "sourcing/base.html" %}
+{% block title %}{{ role.title }} — Jill{% endblock %}
+{% block head %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block body %}
+  <h1>{{ role.title }}</h1>
+  <p class="sub">Ranked leads with rubric breakdown &amp; provenance — outreach awaits your approval.</p>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+    <!-- LinkedIn connection (Gojiberry-style) -->
+    <div class="card" style="flex:1;min-width:280px;margin-bottom:0">
+      <div class="row" style="gap:10px">
+        <span class="score" style="background:#eaf1fb;color:#2a5bd7;font-size:15px">in</span>
+        <div style="flex:1">
+          {% if linkedin and linkedin.status == 'connected' %}
+            <div class="name">{{ linkedin.account_name }} <span class="verdict fit">· connected</span></div>
+            <div class="muted">{{ linkedin.invites_remaining }}/{{ linkedin.daily_invite_limit }} invites left today · approve a LinkedIn draft to send</div>
+          {% else %}
+            <div class="name">LinkedIn — not connected</div>
+            <form method="post" action="/ui/sourcing/linkedin/connect/?tenant={{ tenant.id }}" style="margin-top:8px">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="/ui/sourcing/roles/{{ role.id }}/">
+              <input name="account_name" placeholder="Account name" class="btn" style="width:150px">
+              <button class="primary">Connect account</button>
+            </form>
+            <div class="muted" style="margin-top:5px;font-size:12.5px">Paste your session to send invites through your account (demo uses a mock session).</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Spend -->
+    <div class="card" style="width:300px;margin-bottom:0">
+      <div class="muted" style="font-size:12.5px;text-transform:uppercase;letter-spacing:.04em">Estimated spend</div>
+      <div style="font-family:var(--serif);font-size:28px;margin:2px 0 6px">${{ cost.total_usd }}</div>
+      <div class="muted" style="font-size:12.5px">
+        {{ cost.scrapes }} scrapes · {{ cost.llm_calls }} Claude calls · {{ cost.invites_sent }} invites
+      </div>
+      <div style="margin-top:6px">
+        <span class="chip">Brightdata {{ cost.brightdata_cents|floatformat:1 }}¢</span>
+        <span class="chip">Claude {{ cost.llm_cents|floatformat:1 }}¢</span>
+        <span class="chip">Outreach {{ cost.outreach_cents|floatformat:1 }}¢</span>
+      </div>
+    </div>
+  </div>
+
+  {% if runs %}
+    <h3>Sourcing runs
+      {% if auto_refresh %}<span class="live"><span class="dot"></span>live</span>{% endif %}
+    </h3>
+    <div class="card" style="padding:6px 14px">
+      <table>
+        <tr><th>Run</th><th>Status</th><th>Scanned</th><th>Found</th><th>Fit</th><th>Drafts</th><th>Started</th></tr>
+        {% for r in runs %}
+          <tr>
+            <td>#{{ r.id }}</td>
+            <td><span class="pill {{ r.status }}">{{ r.get_status_display }}</span></td>
+            <td class="counters">{{ r.scanned_companies }}</td>
+            <td class="counters">{{ r.found_candidates }}</td>
+            <td class="counters">{{ r.fit_candidates }}</td>
+            <td class="counters">{{ r.drafted }}</td>
+            <td class="muted">{{ r.started_at|default:"—" }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+
+  <h3>Leads ({{ leads|length }})</h3>
+  {% for lead in leads %}
+    <div class="card">
+      <div class="row" style="align-items:flex-start">
+        <span class="score {{ lead.score.verdict }}">{{ lead.score.score }}</span>
+        <div style="flex:1;min-width:0">
+          <div class="row" style="gap:8px">
+            <span class="name">{{ lead.candidate.full_name|default:lead.candidate.linkedin_url }}</span>
+            <span class="verdict {{ lead.score.verdict }}">· {{ lead.score.get_verdict_display }}</span>
+          </div>
+          <div class="muted">{{ lead.candidate.current_title }} @ {{ lead.candidate.current_company }}</div>
+
+          {% if lead.score.summary %}<div class="summary">{{ lead.score.summary }}</div>{% endif %}
+
+          {% if lead.score.criteria %}
+            <div style="margin-top:8px">
+              {% for c in lead.score.criteria %}
+                <span class="chip {{ c.status }}" title="{{ c.detail }}">
+                  {% if c.status == 'met' %}✓{% elif c.status == 'partial' %}~{% else %}✗{% endif %}
+                  {{ c.name }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div style="margin-top:6px">
+            {% for p in lead.provenance %}
+              <span class="chip {% if p.kind == 'network' %}net{% else %}prov{% endif %}">
+                {{ p.kind }} ← {{ p.from }}{% if p.method %} · {{ p.method }}{% endif %} · d{{ p.depth }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card">No scored leads yet. Run <code>jill source {{ role.id }}</code>.</div>
+  {% endfor %}
+
+  <h3>Outreach ({{ drafts|length }})</h3>
+  <div class="card" style="padding:6px 14px">
+    <table>
+      <tr><th>Candidate</th><th>Channel</th><th>Status</th><th>Preview</th><th></th></tr>
+      {% for d in drafts %}
+        <tr>
+          <td>{{ d.candidate.full_name|default:d.candidate.linkedin_url }}</td>
+          <td>{{ d.channel }}</td>
+          <td><span class="pill {{ d.status }}">{{ d.get_status_display }}</span></td>
+          <td class="muted">{{ d.body|truncatechars:64 }}</td>
+          <td>
+            {% if d.status == 'draft' %}
+              <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/approve/?tenant={{ tenant.id }}">
+                {% csrf_token %}<button class="primary">Approve</button></form>
+              <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/reject/?tenant={{ tenant.id }}">
+                {% csrf_token %}<button>Reject</button></form>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="muted">No drafts yet.</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+{% endblock %}

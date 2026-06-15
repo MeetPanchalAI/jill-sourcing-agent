@@ -1,0 +1,51 @@
+{
+  "name": "Vapi",
+  "linkedin_url": "https://linkedin.com/company/vapi",
+  "employees": [
+    {
+      "linkedin_url": "https://linkedin.com/in/alice-nguyen",
+      "full_name": "Alice Nguyen",
+      "headline": "Founding Voice AI Engineer @ Vapi",
+      "current_title": "Founding Engineer",
+      "current_company": "Vapi",
+      "started_at": "2026-05-15",
+      "location": "San Francisco, CA"
+    },
+    {
+      "linkedin_url": "https://linkedin.com/in/bob-martinez",
+      "full_name": "Bob Martinez",
+      "headline": "Speech & Realtime Infra @ Vapi",
+      "current_title": "Senior Software Engineer",
+      "current_company": "Vapi",
+      "started_at": "2026-04-20",
+      "location": "Remote (US)"
+    },
+    {
+      "linkedin_url": "https://linkedin.com/in/dave-okoro",
+      "full_name": "Dave Okoro",
+      "headline": "Engineer @ Vapi",
+      "current_title": "Software Engineer",
+      "current_company": "Vapi",
+      "started_at": "2026-06-04",
+      "location": "New York, NY"
+    },
+    {
+      "linkedin_url": "https://linkedin.com/in/carol-smith",
+      "full_name": "Carol Smith",
+      "headline": "Director of Engineering @ Vapi",
+      "current_title": "Director of Engineering",
+      "current_company": "Vapi",
+      "started_at": "2024-01-10",
+      "location": "San Francisco, CA"
+    },
+    {
+      "linkedin_url": "https://linkedin.com/in/erin-patel",
+      "full_name": "Erin Patel",
+      "headline": "Recruiter @ Vapi",
+      "current_title": "Technical Recruiter",
+      "current_company": "Vapi",
+      "started_at": null,
+      "location": "Austin, TX"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "zenlib-agent-py"
+version = "0.1.0"
+description = "Domain apps — candidates fill in email_pipeline here."
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.15",
+    "zenlib-mt-py",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zenlib_agentos"]
+# Ship the dashboard templates (non-.py files aren't picked up automatically).
+artifacts = ["**/templates/**/*.html"]

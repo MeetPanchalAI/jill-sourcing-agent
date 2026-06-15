@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jill-worker"
+version = "0.1.0"
+description = "Jill sourcing worker — Temporal workflows, Brightdata, Claude agent, CLI."
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "temporalio>=1.7",
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "pydantic>=2.8",
+    "typer>=0.12",
+]
+
+[project.scripts]
+jill = "jill.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jill"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/jill/brightdata/fixtures" = "jill/brightdata/fixtures"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-q --tb=short"

@@ -1,0 +1,15 @@
+{
+  "linkedin_url": "https://linkedin.com/in/frank-li",
+  "full_name": "Frank Li",
+  "headline": "Voice Agents Engineer @ Retell AI",
+  "location": "San Francisco, CA",
+  "current_company": "Retell AI",
+  "current_title": "Software Engineer",
+  "started_at": "2026-05-01",
+  "experiences": [
+    {"company": "Retell AI", "title": "Software Engineer", "start": "2026-05-01", "end": null},
+    {"company": "Deepgram", "title": "Speech ML Engineer", "start": "2023-04-01", "end": "2026-04-20"}
+  ],
+  "skills": ["Python", "PyTorch", "Speech-to-Text", "LLMs", "CUDA"],
+  "education": [{"school": "CMU", "degree": "MS Machine Learning"}]
+}

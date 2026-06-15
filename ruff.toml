@@ -1,0 +1,20 @@
+line-length = 88
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "S", "RUF"]
+ignore = ["S101", "S105"]  # S101 = assert in tests; S105 = hard-coded password (env defaults)
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S106"]
+"*/migrations/*" = ["E501", "RUF012"]
+# RUF012 wants ClassVar on mutable class attrs; Django Meta (constraints,
+# indexes, ordering) and DRF serializer Meta (fields, read_only_fields) are
+# framework-read config, not shared mutable state — the rule is a false
+# positive against the idiom, so we exempt those layers.
+"**/models/**" = ["RUF012"]
+"**/serializers/**" = ["RUF012"]
+"**/views/**" = ["RUF012"]
+
+[format]
+quote-style = "double"
