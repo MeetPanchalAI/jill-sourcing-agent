@@ -234,7 +234,15 @@ def outreach_action(request, draft_id: int, action: str):
     _activate(tenant)
     draft = get_object_or_404(OutreachDraft, id=draft_id)
     try:
-        if action == "approve":
+        if action == "edit":
+            # Recruiter refines the AI draft before approving — drafts only.
+            if draft.status == OutreachDraft.Status.DRAFT:
+                body = request.POST.get("body", "").strip()
+                draft.subject = request.POST.get("subject", draft.subject).strip()
+                if body:
+                    draft.body = body
+                draft.save()
+        elif action == "approve":
             draft.approve(by="ui")
             # One-click "take action": for a LinkedIn invite, send it through the
             # connected account immediately (mock delivery), respecting the daily

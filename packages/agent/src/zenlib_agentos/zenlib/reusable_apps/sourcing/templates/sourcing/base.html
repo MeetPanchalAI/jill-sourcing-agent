@@ -133,6 +133,26 @@
       .brief > div{border-left:none;border-top:1px solid var(--line);padding:10px 0}
       .brief > div:first-child{border-top:none}
     }
+
+    /* expandable outreach message (native <details>, no JS) */
+    .msg{max-width:560px}
+    .msg summary{cursor:pointer;list-style:none;color:var(--muted);font-size:13.5px;
+                 display:flex;gap:7px;align-items:baseline}
+    .msg summary::-webkit-details-marker{display:none}
+    .msg summary::before{content:"▸";color:var(--accent);font-size:11px;flex:none;
+                         transition:transform .15s;transform:translateY(-1px)}
+    .msg[open] summary::before{transform:rotate(90deg) translateX(-1px)}
+    .msg summary b{color:var(--ink)} .msg summary:hover{color:var(--ink)}
+    .msg summary .pre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .msg[open] summary .pre{white-space:normal}
+    .msg-full{margin-top:9px;background:var(--cream);border:1px solid var(--line);
+              border-radius:10px;padding:12px 14px;white-space:pre-wrap;
+              font-size:13.5px;line-height:1.55;color:#3a3730}
+    .msg-subj{font-weight:600;color:var(--ink);margin-bottom:6px}
+    .msg-edit{margin-top:9px}
+    .msg-subj-in{display:block;width:100%;margin-bottom:7px;font-weight:600}
+    .msg-body-in{display:block;width:100%;font:inherit;line-height:1.55;resize:vertical}
+    .msg-actions{margin-top:8px;display:flex;align-items:center;gap:10px}
   </style>
 </head>
 <body>

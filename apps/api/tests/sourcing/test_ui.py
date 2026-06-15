@@ -123,3 +123,35 @@ def test_approve_from_ui_transitions_draft(client, tenant_a, in_tenant):
         draft.refresh_from_db()
         assert draft.status == OutreachDraft.Status.APPROVED
         assert draft.approved_by == "ui"
+
+
+def test_edit_draft_message_from_ui(client, tenant_a, in_tenant):
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        _, _, draft = _seed(tenant_a)
+    resp = client.post(
+        f"/ui/sourcing/outreach/{draft.id}/edit/?tenant={tenant_a.id}",
+        {"subject": "New subject", "body": "Rewritten outreach body.",
+         "next": "/ui/sourcing/outreach/"},
+    )
+    assert resp.status_code == 302
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        draft.refresh_from_db()
+        assert draft.body == "Rewritten outreach body."
+        assert draft.subject == "New subject"
+
+
+def test_edit_is_ignored_after_approval(client, tenant_a, in_tenant):
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        _, _, draft = _seed(tenant_a)
+        draft.approve(by="ui")
+    client.post(
+        f"/ui/sourcing/outreach/{draft.id}/edit/?tenant={tenant_a.id}",
+        {"body": "should not apply"},
+    )
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        draft.refresh_from_db()
+        assert draft.body == "Hi Alice"  # unchanged — only drafts are editable

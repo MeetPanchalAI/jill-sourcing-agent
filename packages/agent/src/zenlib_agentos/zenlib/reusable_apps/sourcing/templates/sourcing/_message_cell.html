@@ -1,0 +1,21 @@
+{% comment %}Expandable outreach message — click the preview to read, and edit a
+draft in place before approving. Expects: draft, tenant, next_url.{% endcomment %}
+<details class="msg">
+  <summary><span class="pre">{% if draft.subject %}<b>{{ draft.subject }}</b> — {% endif %}{{ draft.body }}</span></summary>
+  {% if draft.status == 'draft' %}
+    <form class="msg-edit" method="post" action="/ui/sourcing/outreach/{{ draft.id }}/edit/?tenant={{ tenant.id }}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next_url }}">
+      {% if draft.channel == 'email' %}
+        <input class="btn msg-subj-in" name="subject" value="{{ draft.subject }}" placeholder="Subject">
+      {% endif %}
+      <textarea class="btn msg-body-in" name="body" rows="6">{{ draft.body }}</textarea>
+      <div class="msg-actions">
+        <button class="primary">Save changes</button>
+        <span class="muted" style="font-size:12px">Refine the draft before you approve it.</span>
+      </div>
+    </form>
+  {% else %}
+    <div class="msg-full">{% if draft.subject %}<div class="msg-subj">{{ draft.subject }}</div>{% endif %}{{ draft.body }}</div>
+  {% endif %}
+</details>

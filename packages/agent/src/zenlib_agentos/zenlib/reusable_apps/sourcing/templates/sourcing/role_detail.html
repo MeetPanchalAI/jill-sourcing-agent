@@ -140,7 +140,7 @@
         <tr>
           <td>{{ d.candidate.full_name|default:d.candidate.linkedin_url }}</td>
           <td>{{ d.get_channel_display }}</td>
-          <td class="muted">{% if d.subject %}<b style="color:var(--ink)">{{ d.subject }}</b> — {% endif %}{{ d.body|truncatechars:64 }}</td>
+          <td>{% include "sourcing/_message_cell.html" with draft=d next_url=request.path %}</td>
           <td><span class="pill {{ d.status }}">{{ d.get_status_display }}</span></td>
           <td style="white-space:nowrap">
             {% if d.status == 'draft' %}
