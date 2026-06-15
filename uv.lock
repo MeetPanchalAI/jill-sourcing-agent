@@ -981,6 +981,7 @@ source = { editable = "packages/agent" }
 dependencies = [
     { name = "django" },
     { name = "djangorestframework" },
+    { name = "jill-worker" },
     { name = "zenlib-mt-py" },
 ]
 
@@ -988,6 +989,7 @@ dependencies = [
 requires-dist = [
     { name = "django", specifier = ">=5.2,<5.3" },
     { name = "djangorestframework", specifier = ">=3.15" },
+    { name = "jill-worker", editable = "apps/worker" },
     { name = "zenlib-mt-py", editable = "packages/mt" },
 ]
 

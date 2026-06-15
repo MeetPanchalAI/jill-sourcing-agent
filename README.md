@@ -1,229 +1,98 @@
 # Jill — AI Sourcing Agent
 
-An AI recruiting agent that **finds warm candidates**. Jill monitors target
-companies for recent joiners, scores each against a role's ideal-candidate profile,
-expands the search through every strong lead's **previous employer and network**,
-and stages personalized outreach for a human to approve — never auto-sent.
+Jill is an AI recruiting agent that finds warm candidates. You give it a role and a
+target company; Jill watches that company for people who **recently joined**, scores
+each against your criteria, follows strong leads to their **previous employers and
+former colleagues**, and writes outreach for you to approve. You drive the whole
+thing from a web portal.
 
-The insight: people who *recently joined a relevant company* are warm leads, and
-their former colleagues and previous employers are dense pools of similar talent.
-So the core loop is **lead → lead's previous employer → lead's network**, bounded by
-depth and budget.
-
-> Everything runs **offline by default** (fixtures, no API keys, no real scraping).
-> Switching to real services is a single configuration flag.
+Runs fully offline with built-in sample data — **no API keys needed** to try it.
 
 ---
 
-## Highlights
+## What does what
 
-- **Multi-tenant by construction** — Postgres **row-level security** isolates every
-  tenant's data at the database layer, not just in application code.
-- **Durable orchestration** — the crawl runs as a **Temporal** workflow: automatic
-  retries, exact resume-after-crash, deterministic replay, and cron scheduling.
-- **Structured AI judgment** — Claude is used only where it adds value (scoring fit,
-  drafting outreach), always behind a validated schema with grounded evidence.
-- **Weighted rubric scoring** — ex-founder, school pedigree, language, domain
-  experience, tenure band, and open-ended signals; each candidate gets a
-  per-criterion breakdown and a one-line summary.
-- **Consent-first outreach** — a state machine forbids sending without explicit
-  approval; one-click *approve-and-send* through a connected LinkedIn account.
-- **Operator surface** — a server-rendered dashboard (ranked leads, rubric chips,
-  live run status, spend estimate) and a `jill` command-line tool.
-- **Tested** — worker 59 + Django 28 tests, lint and security scans clean, and a
-  Temporal replay-determinism check.
-
----
-
-## Architecture
-
-Three cleanly separated planes:
-
-```
-Record plane    Django + DRF + Postgres (row-level security)
-                The system of record + a service-token HTTP API + the dashboard.
-      ▲  writes over HTTP (the X-Tenant-Id header drives isolation)
-      │
-Control plane   Temporal worker — a bounded breadth-first crawl of the lead graph
-      ▲  calls
-      │
-Judgment plane  Claude, behind interfaces — score a candidate, draft an invite
-```
-
-The worker authenticates as a **service account** and only ever writes through the
-tenant-scoped API, so row-level security stays the single isolation boundary. Every
-external dependency (LinkedIn data, the language model, outreach delivery) sits
-behind an interface with a **mock** and a **live** implementation, selected at
-runtime — which is why the whole system runs deterministically offline.
-
----
-
-## Tech stack
-
-| Layer | Technology |
+| Piece | What it does |
 | --- | --- |
-| API & web | Python 3.12, Django 5.2, Django REST Framework |
-| Database | PostgreSQL 17 (row-level security) |
-| Orchestration | Temporal |
-| AI | Anthropic Claude (via the official SDK), Pydantic-validated outputs |
-| LinkedIn data | Brightdata (mockable) |
-| Tooling | `uv` (workspace + deps), `ruff` (lint), `bandit` (security), `pytest` |
+| **Portal** (`/ui/sourcing/`) | The web app you use: create roles, start sourcing, review ranked leads, approve outreach. This is all you need. |
+| **Sourcing pipeline** | The agent loop: monitor a company → score its recent joiners → expand through each strong lead's previous employers & network → draft outreach. Bounded by depth and budget. |
+| **Rubric scorer** | Scores each candidate 0–100 against weighted criteria (skills, ex-founder, pedigree, domain, tenure) with a per-criterion breakdown. Uses Claude in live mode, deterministic rules in mock mode. |
+| **Database** (PostgreSQL) | Stores everything, with **row-level security** so each company's data is fully isolated from the others. |
+| **`.env` file** | All configuration in one place. Copy `.env.example` to `.env`; the defaults work as-is. |
+| **`jill` CLI** *(optional)* | A command-line mirror of the portal. `uv run jill demo` runs the whole pipeline in memory and prints the results. |
+| **Temporal worker** *(optional)* | Runs sourcing as a **durable, resumable** workflow (automatic retries, resume-after-crash) for production. |
 
 ---
 
 ## Prerequisites
 
 - **Python 3.12+**
-- **[uv](https://docs.astral.sh/uv/)** — the package & workspace manager
-  (`curl -LsSf https://astral.sh/uv/install.sh | sh`, or `pip install uv`)
-- **Docker** — to run PostgreSQL locally
-
-No environment variables are required for local development — every setting has a
-sensible default.
+- **[uv](https://docs.astral.sh/uv/)** — the package manager
+- **Docker** — to run PostgreSQL
 
 ---
 
-## Quickstart
+## Setup
 
 ```bash
 git clone https://github.com/MeetPanchalAI/jill-sourcing-agent.git
 cd jill-sourcing-agent
-uv sync --all-packages          # install all workspace packages
+
+uv sync --all-packages                                   # install everything
+cp .env.example .env                                     # config — defaults work as-is
+docker compose -f apps/api/docker-compose.yml up -d db   # start PostgreSQL
+uv run python apps/api/manage.py migrate                 # create the database tables
+uv run python apps/api/manage.py create_tenant "Acme"    # create your company (a "tenant")
+uv run python apps/api/manage.py runserver 8000          # start the portal
 ```
 
-### 1. See it run — no servers, no setup
-
-```bash
-uv run jill demo
-```
-
-Runs the full pipeline in memory over fixtures and prints the ranked, rubric-scored
-leads with provenance.
-
-### 2. Run the full application (API + dashboard)
-
-```bash
-# start PostgreSQL
-docker compose -f apps/api/docker-compose.yml up -d db
-
-# apply migrations
-uv run python apps/api/manage.py migrate
-
-# create a tenant — prints its id (e.g. 1); single line, works in any shell
-uv run python apps/api/manage.py shell -c "from zenlib.reusable_apps.multitenant.models import Tenant; print(Tenant.objects.create(name='Acme', slug='acme', service_token='x').id)"
-
-# run the API + dashboard
-uv run python apps/api/manage.py runserver 8000
-```
-
-> The setup commands above (`uv run …`, `docker compose …`) are identical on macOS,
-> Linux, and Windows. Only the per-shell CLI commands below differ.
-
-In a second terminal, drive it with the CLI. `role create` prints a role id — use
-**that** id (not necessarily `1`) for `source` and `leads`. Use your tenant id for
-`JILL_TENANT_ID` (the seed command above prints it).
-
-**macOS / Linux (bash, zsh):**
-
-```bash
-export JILL_TENANT_ID=1
-echo '{"target_companies":[{"name":"Vapi"}],"must_have_skills":["Python","Realtime Audio"]}' > icp.json
-uv run jill role create --title "Voice AI Engineer" --icp icp.json   # prints: role <N> created
-uv run jill source <N>
-uv run jill leads <N>
-```
-
-**Windows (PowerShell):**
-
-```powershell
-$env:JILL_TENANT_ID = "1"
-'{"target_companies":[{"name":"Vapi"}],"must_have_skills":["Python","Realtime Audio"]}' | Set-Content icp.json -Encoding utf8
-uv run jill role create --title "Voice AI Engineer" --icp icp.json   # prints: role <N> created
-uv run jill source <N>
-uv run jill leads <N>
-```
-
-> The two shells differ in how they set environment variables (`export VAR=…` vs
-> `$env:VAR='…'`) and how they write files (PowerShell's `>` produces UTF-16, so use
-> `Set-Content -Encoding utf8`).
-
-Open the dashboard: **http://localhost:8000/ui/sourcing/?tenant=1** — ranked leads
-with rubric chips and provenance, live run status, spend, and one-click approve.
-
-> **Windows PowerShell:** set inline environment variables with
-> `$env:JILL_TENANT_ID='1'` on a separate line instead of the `NAME=value cmd` form.
-
-### 3. Durable execution with Temporal (optional)
-
-The crawl above runs in-process. To run it as a durable, schedulable workflow,
-start a [Temporal](https://docs.temporal.io/cli) dev server and the worker:
-
-```bash
-temporal server start-dev                 # Temporal UI at http://localhost:8233
-uv run jill worker                         # in another terminal
-JILL_TENANT_ID=1 uv run jill source 1 --no-local   # enqueue the durable workflow
-```
+> **Windows:** replace `cp` with `Copy-Item`; every other command is identical.
 
 ---
 
-## Testing
+## Use it
 
-```bash
-docker compose -f apps/api/docker-compose.yml up -d db   # Django tests need Postgres
+Open **http://localhost:8000** — you land on the portal.
 
-uv run pytest                       # Django / API tests (from the repo root)
-cd apps/worker && uv run pytest     # worker tests (downloads a Temporal test server once)
-```
+1. **New role** — enter a title, a seed company (e.g. `Vapi`), and must-have skills.
+2. **Start sourcing** — Jill crawls, scores, and drafts. Ranked leads appear in seconds.
+3. **Review** — each lead shows its score, rubric breakdown, and how it was found.
+4. **Approve** — outreach is staged as drafts; nothing is sent until you approve it.
+
+That's the whole flow — no command line needed.
 
 ---
 
 ## Configuration
 
-All optional — defaults cover local development. Override via environment variables:
+All settings live in `.env` (copied from `.env.example`). The defaults run everything
+**offline in mock mode**, so you can ignore this section to start.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `JILL_MODE` | `mock` | `live` engages real Brightdata / Claude / delivery |
-| `BRIGHTDATA_API_KEY` | — | required in live mode for LinkedIn data |
-| `ANTHROPIC_API_KEY` | — | required in live mode for Claude scoring/drafting |
-| `SERVICE_TOKEN` | `dev-service-token-change-me` | shared secret between the worker and the API |
-| `DJANGO_SECRET_KEY` | dev default | set a real value in production |
-| `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | `zenapi` / `zen` / `zen` / `localhost` / `5432` | database connection |
-| `TEMPORAL_ADDRESS` | `localhost:7233` | Temporal server address |
+- Real AI scoring/drafting → set `JILL_MODE=live` and `ANTHROPIC_API_KEY`.
+- Real LinkedIn data → also set `BRIGHTDATA_API_KEY` (otherwise LinkedIn stays mocked).
 
-Copy `.env.example` to `.env` and fill in any secrets — it is loaded
-automatically. Switching to live mode is just `JILL_MODE=live` plus the relevant
-keys; no code change.
+Database, ports, and secrets all have working local defaults.
 
 ---
 
-## Project structure
+## Tests
 
+```bash
+docker compose -f apps/api/docker-compose.yml up -d db   # tests need Postgres
+uv run pytest                                            # API + portal tests
+cd apps/worker && uv run pytest                          # worker / pipeline tests
 ```
-apps/api/         Django application: settings, URL routing, service-token auth
-apps/worker/      The "jill" package: Brightdata client, Claude scorer/drafter,
-                  Temporal workflow + activities, pipeline stages, and the CLI
-packages/agent/   The "sourcing" Django app: models, REST API, dashboard, spend
-packages/mt/      Multi-tenancy + row-level-security library (shared, do not modify)
-docs/sourcing/    Product requirements, plan, constraints, test plan, CLI reference
-```
-
-The repository is a `uv` workspace (multiple Python packages managed together).
 
 ---
 
-## How it works (one run)
+## Optional: command line & durable workflows
 
-1. A recruiter creates a **role** with an ideal-candidate profile and presses
-   "source"; the API records a run and seeds the target companies.
-2. The worker scans each company, keeps the **recent joiners**, enriches their
-   profiles, and **scores** them against the rubric.
-3. Each *fit* lead **expands** the search — its previous employers become new
-   companies to monitor, its network becomes new candidates — and gets a
-   **personalized draft** (LinkedIn + email).
-4. The crawl repeats, bounded by depth and budget, de-duplicating as it goes.
-5. The recruiter reviews ranked leads on the dashboard and **approves** outreach;
-   only then is anything sent.
+```bash
+uv run jill demo     # run the full monitor → score → expand → draft pipeline in memory
+```
+
+To run sourcing as a durable Temporal workflow (production-grade retries and
+resume-after-crash) instead of in-process, see [docs/sourcing/](docs/sourcing/).
 
 ---
 

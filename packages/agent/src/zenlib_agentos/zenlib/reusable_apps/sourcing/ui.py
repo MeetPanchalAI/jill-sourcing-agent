@@ -24,6 +24,19 @@ from .models import (
 )
 from .usage import role_cost
 
+# A sensible default rubric so a role created from the portal scores richly
+# out of the box. The recruiter can refine criteria/weights later via the API.
+DEFAULT_RUBRIC = [
+    {"name": "Ex-founder", "type": "founder", "weight": 2},
+    {"name": "Pedigree", "type": "pedigree", "weight": 2},
+    {"name": "Voice/AI domain", "type": "domain", "weight": 2,
+     "keywords": ["voice", "audio", "speech", "realtime", "telephony", "ai"]},
+    {"name": "Tenure 2-6y", "type": "tenure", "weight": 1,
+     "min_years": 2, "max_years": 6},
+    {"name": "0-to-1 builder", "type": "open", "weight": 1,
+     "description": "early-stage / first-engineer experience"},
+]
+
 
 def _resolve_tenant(request) -> Tenant | None:
     tid = request.GET.get("tenant") or request.POST.get("tenant")
@@ -58,6 +71,51 @@ def roles_index(request):
         "tenants": Tenant.objects.filter(is_active=True),
         "roles": Role.objects.all(),
     })
+
+
+def create_role(request):
+    """Create a role from the portal: title + seed company + must-have skills.
+
+    Must-have skills become weighted ``skill`` criteria, prepended to a sensible
+    default rubric, so the new role scores leads richly without any API call."""
+    tenant = _resolve_tenant(request)
+    if tenant is None:
+        return redirect("/ui/sourcing/")
+    _activate(tenant)
+    title = (request.POST.get("title") or "Untitled role").strip()
+    company = (request.POST.get("company") or "").strip()
+    skills = [s.strip() for s in (request.POST.get("skills") or "").split(",")
+              if s.strip()]
+    skill_criteria = [
+        {"name": s, "type": "skill", "skill": s, "weight": 2} for s in skills
+    ]
+    role = Role.objects.create(
+        title=title,
+        status=Role.Status.SOURCING,
+        icp={
+            "target_companies": [{"name": company}] if company else [],
+            "must_have_skills": skills,
+            "rubric": skill_criteria + DEFAULT_RUBRIC,
+        },
+    )
+    return redirect(f"/ui/sourcing/roles/{role.id}/?tenant={tenant.id}")
+
+
+def start_sourcing(request, role_id: int):
+    """Run the sourcing pipeline in-process and return to the role with its leads.
+
+    Synchronous: the mock crawl finishes in under a second, so results are ready
+    on redirect. The durable production path is the Temporal workflow."""
+    tenant = _resolve_tenant(request)
+    if tenant is None:
+        return redirect("/ui/sourcing/")
+    _activate(tenant)
+    role = get_object_or_404(Role, id=role_id)
+
+    from .agent_runner import run_sourcing_inprocess
+
+    run_sourcing_inprocess(role)
+    return redirect(f"/ui/sourcing/roles/{role.id}/?tenant={tenant.id}")
 
 
 def role_detail(request, role_id: int):

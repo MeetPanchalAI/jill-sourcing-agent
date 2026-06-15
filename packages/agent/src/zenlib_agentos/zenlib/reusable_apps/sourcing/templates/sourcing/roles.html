@@ -13,6 +13,25 @@
         {% endfor %}
       </p>
     {% endif %}
+    <!-- New role: title + seed company + must-have skills -->
+    <form class="card" method="post" action="/ui/sourcing/roles/new/?tenant={{ tenant.id }}"
+          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      {% csrf_token %}
+      <div style="flex:2;min-width:180px">
+        <div class="muted" style="font-size:12.5px">Role title</div>
+        <input name="title" placeholder="Voice AI Engineer" class="btn" style="width:100%" required>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <div class="muted" style="font-size:12.5px">Seed company</div>
+        <input name="company" placeholder="Vapi" class="btn" style="width:100%">
+      </div>
+      <div style="flex:2;min-width:180px">
+        <div class="muted" style="font-size:12.5px">Must-have skills (comma-separated)</div>
+        <input name="skills" placeholder="Python, Realtime Audio" class="btn" style="width:100%">
+      </div>
+      <button class="primary">+ New role</button>
+    </form>
+
     {% for role in roles %}
       <div class="card row">
         <span class="score">{{ role.title|slice:":1" }}</span>
@@ -23,7 +42,7 @@
         <a class="btn" href="/ui/sourcing/roles/{{ role.id }}/?tenant={{ tenant.id }}">View leads →</a>
       </div>
     {% empty %}
-      <div class="card">No roles yet. Create one with <code>jill role create</code>.</div>
+      <div class="card">No roles yet — create your first one above.</div>
     {% endfor %}
   {% endif %}
 {% endblock %}

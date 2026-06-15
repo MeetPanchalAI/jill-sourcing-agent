@@ -2,8 +2,16 @@
 {% block title %}{{ role.title }} — Jill{% endblock %}
 {% block head %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block body %}
-  <h1>{{ role.title }}</h1>
-  <p class="sub">Ranked leads with rubric breakdown &amp; provenance — outreach awaits your approval.</p>
+  <div class="row" style="align-items:flex-start">
+    <div style="flex:1">
+      <h1 style="margin-bottom:2px">{{ role.title }}</h1>
+      <p class="sub">Ranked leads with rubric breakdown &amp; provenance — outreach awaits your approval.</p>
+    </div>
+    <form method="post" action="/ui/sourcing/roles/{{ role.id }}/source/?tenant={{ tenant.id }}">
+      {% csrf_token %}
+      <button class="primary" style="font-size:15px;padding:9px 16px">▶ Start sourcing</button>
+    </form>
+  </div>
 
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
     <!-- LinkedIn connection (Gojiberry-style) -->
@@ -99,7 +107,7 @@
       </div>
     </div>
   {% empty %}
-    <div class="card">No scored leads yet. Run <code>jill source {{ role.id }}</code>.</div>
+    <div class="card">No scored leads yet — click <b>▶ Start sourcing</b> above.</div>
   {% endfor %}
 
   <h3>Outreach ({{ drafts|length }})</h3>
