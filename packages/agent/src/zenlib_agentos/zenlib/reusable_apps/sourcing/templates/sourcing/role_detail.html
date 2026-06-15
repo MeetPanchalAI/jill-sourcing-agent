@@ -2,15 +2,40 @@
 {% block title %}{{ role.title }} — Jill{% endblock %}
 {% block head %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block body %}
-  <div class="row" style="align-items:flex-start">
-    <div style="flex:1">
+  <div class="topbar">
+    <div>
       <h1 style="margin-bottom:2px">{{ role.title }}</h1>
       <p class="sub">Ranked leads with rubric breakdown &amp; provenance — outreach awaits your approval.</p>
     </div>
     <form method="post" action="/ui/sourcing/roles/{{ role.id }}/source/?tenant={{ tenant.id }}">
       {% csrf_token %}
-      <button class="primary" style="font-size:15px;padding:9px 16px">▶ Start sourcing</button>
+      <button class="primary" style="padding:9px 16px">▶ Start sourcing</button>
     </form>
+  </div>
+
+  <div class="tiles">
+    {% for label, value, tone in summary %}
+      <div class="card tile"><div class="l">{{ label }}</div><div class="n {{ tone }}">{{ value }}</div></div>
+    {% endfor %}
+  </div>
+
+  <!-- What Jill is sourcing for: monitored companies + skills + rubric -->
+  <div class="card">
+    <div class="kv">
+      <div class="lab">Monitoring</div>
+      <div class="chips">
+        {% for t in targets %}<span class="chip prov">{{ t.name }}{% if t.depth %} · d{{ t.depth }}{% endif %}</span>
+        {% empty %}<span class="muted">Seed companies appear here once sourcing runs.</span>{% endfor %}
+      </div>
+      {% if skills %}
+        <div class="lab">Must-have</div>
+        <div class="chips">{% for s in skills %}<span class="chip met">{{ s }}</span>{% endfor %}</div>
+      {% endif %}
+      {% if rubric %}
+        <div class="lab">Scoring rubric</div>
+        <div class="chips">{% for c in rubric %}<span class="chip" title="type: {{ c.type }}">{{ c.name }} <span class="muted">×{{ c.weight }}</span></span>{% endfor %}</div>
+      {% endif %}
+    </div>
   </div>
 
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
@@ -21,7 +46,7 @@
         <div style="flex:1">
           {% if linkedin and linkedin.status == 'connected' %}
             <div class="name">{{ linkedin.account_name }} <span class="verdict fit">· connected</span></div>
-            <div class="muted">{{ linkedin.invites_remaining }}/{{ linkedin.daily_invite_limit }} invites left today · approve a LinkedIn draft to send</div>
+            <div class="metaline">{{ linkedin.invites_remaining }}/{{ linkedin.daily_invite_limit }} invites left today · approve a LinkedIn draft to send</div>
           {% else %}
             <div class="name">LinkedIn — not connected</div>
             <form method="post" action="/ui/sourcing/linkedin/connect/?tenant={{ tenant.id }}" style="margin-top:8px">
@@ -30,20 +55,20 @@
               <input name="account_name" placeholder="Account name" class="btn" style="width:150px">
               <button class="primary">Connect account</button>
             </form>
-            <div class="muted" style="margin-top:5px;font-size:12.5px">Paste your session to send invites through your account (demo uses a mock session).</div>
+            <div class="metaline" style="margin-top:5px;font-size:12.5px">Paste your session to send invites through your account (demo uses a mock session).</div>
           {% endif %}
         </div>
       </div>
     </div>
 
-    <!-- Spend -->
+    <!-- Estimated spend -->
     <div class="card" style="width:300px;margin-bottom:0">
-      <div class="muted" style="font-size:12.5px;text-transform:uppercase;letter-spacing:.04em">Estimated spend</div>
-      <div style="font-family:var(--serif);font-size:28px;margin:2px 0 6px">${{ cost.total_usd }}</div>
-      <div class="muted" style="font-size:12.5px">
+      <div class="lab">Estimated spend</div>
+      <div style="font-family:var(--serif);font-size:28px;margin:3px 0 6px">${{ cost.total_usd }}</div>
+      <div class="metaline" style="font-size:12.5px">
         {{ cost.scrapes }} scrapes · {{ cost.llm_calls }} Claude calls · {{ cost.invites_sent }} invites
       </div>
-      <div style="margin-top:6px">
+      <div class="chips">
         <span class="chip">Brightdata {{ cost.brightdata_cents|floatformat:1 }}¢</span>
         <span class="chip">Claude {{ cost.llm_cents|floatformat:1 }}¢</span>
         <span class="chip">Outreach {{ cost.outreach_cents|floatformat:1 }}¢</span>
@@ -52,9 +77,7 @@
   </div>
 
   {% if runs %}
-    <h3>Sourcing runs
-      {% if auto_refresh %}<span class="live"><span class="dot"></span>live</span>{% endif %}
-    </h3>
+    <h3>Sourcing runs {% if auto_refresh %}<span class="live"><span class="dot"></span>live</span>{% endif %}</h3>
     <div class="card" style="padding:6px 14px">
       <table>
         <tr><th>Run</th><th>Status</th><th>Scanned</th><th>Found</th><th>Fit</th><th>Drafts</th><th>Started</th></tr>
@@ -66,7 +89,7 @@
             <td class="counters">{{ r.found_candidates }}</td>
             <td class="counters">{{ r.fit_candidates }}</td>
             <td class="counters">{{ r.drafted }}</td>
-            <td class="muted">{{ r.started_at|default:"—" }}</td>
+            <td class="when">{{ r.started_at|default:"—" }}</td>
           </tr>
         {% endfor %}
       </table>
@@ -83,44 +106,43 @@
             <span class="name">{{ lead.candidate.full_name|default:lead.candidate.linkedin_url }}</span>
             <span class="verdict {{ lead.score.verdict }}">· {{ lead.score.get_verdict_display }}</span>
           </div>
-          <div class="muted">{{ lead.candidate.current_title }} @ {{ lead.candidate.current_company }}</div>
+          <div class="metaline">{{ lead.candidate.current_title }} @ {{ lead.candidate.current_company }}{% if lead.candidate.location %} · {{ lead.candidate.location }}{% endif %}</div>
+          {% if lead.candidate.headline %}<div class="headline">{{ lead.candidate.headline }}</div>{% endif %}
 
           {% if lead.score.summary %}<div class="summary">{{ lead.score.summary }}</div>{% endif %}
+          {% if lead.score.drop_reason %}<div class="dropline">Dropped — {{ lead.score.drop_reason }}</div>{% endif %}
 
           {% if lead.score.criteria %}
-            <div style="margin-top:8px">
+            <div class="chips">
               {% for c in lead.score.criteria %}
-                <span class="chip {{ c.status }}" title="{{ c.detail }}">
-                  {% if c.status == 'met' %}✓{% elif c.status == 'partial' %}~{% else %}✗{% endif %}
-                  {{ c.name }}</span>
+                <span class="chip {{ c.status }}" title="{{ c.detail }}">{% if c.status == 'met' %}✓{% elif c.status == 'partial' %}~{% else %}✗{% endif %} {{ c.name }}</span>
               {% endfor %}
             </div>
           {% endif %}
-
-          <div style="margin-top:6px">
+          <div class="chips">
             {% for p in lead.provenance %}
-              <span class="chip {% if p.kind == 'network' %}net{% else %}prov{% endif %}">
-                {{ p.kind }} ← {{ p.from }}{% if p.method %} · {{ p.method }}{% endif %} · d{{ p.depth }}</span>
+              <span class="chip {% if p.kind == 'network' %}net{% else %}prov{% endif %}">{{ p.kind }} ← {{ p.from }}{% if p.method %} · {{ p.method }}{% endif %} · d{{ p.depth }}</span>
             {% endfor %}
           </div>
         </div>
+        <a class="btn" href="{{ lead.candidate.linkedin_url }}" target="_blank" rel="noopener">Profile ↗</a>
       </div>
     </div>
   {% empty %}
-    <div class="card">No scored leads yet — click <b>▶ Start sourcing</b> above.</div>
+    <div class="card empty">No scored leads yet — click <b>▶ Start sourcing</b> above.</div>
   {% endfor %}
 
   <h3>Outreach ({{ drafts|length }})</h3>
   <div class="card" style="padding:6px 14px">
     <table>
-      <tr><th>Candidate</th><th>Channel</th><th>Status</th><th>Preview</th><th></th></tr>
+      <tr><th>Candidate</th><th>Channel</th><th>Message</th><th>Status</th><th></th></tr>
       {% for d in drafts %}
         <tr>
           <td>{{ d.candidate.full_name|default:d.candidate.linkedin_url }}</td>
-          <td>{{ d.channel }}</td>
+          <td>{{ d.get_channel_display }}</td>
+          <td class="muted">{% if d.subject %}<b style="color:var(--ink)">{{ d.subject }}</b> — {% endif %}{{ d.body|truncatechars:64 }}</td>
           <td><span class="pill {{ d.status }}">{{ d.get_status_display }}</span></td>
-          <td class="muted">{{ d.body|truncatechars:64 }}</td>
-          <td>
+          <td style="white-space:nowrap">
             {% if d.status == 'draft' %}
               <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/approve/?tenant={{ tenant.id }}">
                 {% csrf_token %}<button class="primary">Approve</button></form>
@@ -130,7 +152,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="5" class="muted">No drafts yet.</td></tr>
+        <tr><td colspan="5" class="empty">No drafts yet.</td></tr>
       {% endfor %}
     </table>
   </div>

@@ -5,7 +5,7 @@ from zenlib_agentos.zenlib.reusable_apps.sourcing import ui
 
 urlpatterns = [
     path("", ui.roles_index, name="ui_sourcing_roles"),
-    path("pipeline/", ui.pipeline, name="ui_sourcing_pipeline"),
+    path("outreach/", ui.outreach_queue, name="ui_sourcing_outreach"),
     path("roles/new/", ui.create_role, name="ui_sourcing_role_create"),
     path("roles/<int:role_id>/", ui.role_detail, name="ui_sourcing_role_detail"),
     path("roles/<int:role_id>/source/", ui.start_sourcing,

@@ -1,0 +1,43 @@
+{% extends "sourcing/base.html" %}
+{% block title %}Outreach — Jill{% endblock %}
+{% block body %}
+  <h1>Outreach</h1>
+  <p class="sub">Every candidate Jill has drafted, across all roles — your approval queue.</p>
+
+  {% if not tenant %}
+    <div class="card empty">No active tenant.</div>
+  {% else %}
+    <div class="tiles">
+      {% for label, value, tone in stat_cards %}
+        <div class="card tile"><div class="l">{{ label }}</div><div class="n {{ tone }}">{{ value }}</div></div>
+      {% endfor %}
+    </div>
+
+    <div class="card" style="padding:6px 14px">
+      <table>
+        <tr><th>Candidate</th><th>Role</th><th>Channel</th><th>Message</th><th>Status</th><th></th></tr>
+        {% for d in drafts %}
+          <tr>
+            <td>{{ d.candidate.full_name|default:d.candidate.linkedin_url }}</td>
+            <td><a class="plain" href="/ui/sourcing/roles/{{ d.role_id }}/?tenant={{ tenant.id }}">{{ d.role.title }}</a></td>
+            <td>{{ d.get_channel_display }}</td>
+            <td class="muted">{% if d.subject %}<b style="color:var(--ink)">{{ d.subject }}</b> — {% endif %}{{ d.body|truncatechars:56 }}</td>
+            <td><span class="pill {{ d.status }}">{{ d.get_status_display }}</span></td>
+            <td style="white-space:nowrap">
+              {% if d.status == 'draft' %}
+                <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/approve/?tenant={{ tenant.id }}">
+                  {% csrf_token %}<input type="hidden" name="next" value="/ui/sourcing/outreach/">
+                  <button class="primary">Approve</button></form>
+                <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/reject/?tenant={{ tenant.id }}">
+                  {% csrf_token %}<input type="hidden" name="next" value="/ui/sourcing/outreach/">
+                  <button>Reject</button></form>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="empty">No outreach yet. Open a role and click <b>▶ Start sourcing</b>.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}

@@ -4,45 +4,56 @@
   <p class="sub">Openings Jill is sourcing for.</p>
 
   {% if not tenant %}
-    <div class="card">No active tenant. Create one, then open <code>?tenant=&lt;id&gt;</code>.</div>
+    <div class="card empty">No active tenant.</div>
   {% else %}
-    {% if tenants %}
-      <p class="muted" style="margin-top:-12px;margin-bottom:18px">Workspace:
-        {% for t in tenants %}
-          <a href="/ui/sourcing/?tenant={{ t.id }}">{{ t.name }}</a>{% if not forloop.last %} · {% endif %}
-        {% endfor %}
+    {% if tenants|length > 1 %}
+      <p class="muted" style="margin:-14px 0 18px">Workspace:
+        {% for t in tenants %}<a href="/ui/sourcing/?tenant={{ t.id }}">{{ t.name }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}
       </p>
     {% endif %}
-    <!-- New role: title + seed company + must-have skills -->
+
     <form class="card" method="post" action="/ui/sourcing/roles/new/?tenant={{ tenant.id }}"
-          style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
       {% csrf_token %}
       <div style="flex:2;min-width:180px">
-        <div class="muted" style="font-size:12.5px">Role title</div>
-        <input name="title" placeholder="Voice AI Engineer" class="btn" style="width:100%" required>
+        <div class="lab">Role title</div>
+        <input name="title" placeholder="Voice AI Engineer" class="btn" style="width:100%;margin-top:5px" required>
       </div>
-      <div style="flex:1;min-width:140px">
-        <div class="muted" style="font-size:12.5px">Seed company</div>
-        <input name="company" placeholder="Vapi" class="btn" style="width:100%">
+      <div style="flex:1;min-width:130px">
+        <div class="lab">Seed company</div>
+        <input name="company" placeholder="Vapi" class="btn" style="width:100%;margin-top:5px">
       </div>
       <div style="flex:2;min-width:180px">
-        <div class="muted" style="font-size:12.5px">Must-have skills (comma-separated)</div>
-        <input name="skills" placeholder="Python, Realtime Audio" class="btn" style="width:100%">
+        <div class="lab">Must-have skills</div>
+        <input name="skills" placeholder="Python, Realtime Audio" class="btn" style="width:100%;margin-top:5px">
       </div>
       <button class="primary">+ New role</button>
     </form>
 
-    {% for role in roles %}
-      <div class="card row">
-        <span class="score">{{ role.title|slice:":1" }}</span>
-        <div style="flex:1">
-          <div class="name"><a href="/ui/sourcing/roles/{{ role.id }}/?tenant={{ tenant.id }}">{{ role.title }}</a></div>
-          <div class="muted">status: {{ role.get_status_display }}{% if role.icp.rubric %} · {{ role.icp.rubric|length }}-criterion rubric{% endif %}</div>
+    {% for rc in role_cards %}
+      <div class="card">
+        <div class="row" style="align-items:flex-start">
+          <span class="score" style="font-size:18px">{{ rc.role.title|slice:":1"|upper }}</span>
+          <div style="flex:1;min-width:0">
+            <div class="row" style="gap:9px">
+              <a class="name" href="/ui/sourcing/roles/{{ rc.role.id }}/?tenant={{ tenant.id }}">{{ rc.role.title }}</a>
+              <span class="pill {{ rc.role.status }}">{{ rc.role.get_status_display }}</span>
+            </div>
+            {% if rc.skills or rc.rubric %}
+              <div class="chips" style="margin-top:7px">
+                {% for s in rc.skills %}<span class="chip met">{{ s }}</span>{% endfor %}
+                {% for c in rc.rubric %}{% if c.type != 'skill' %}<span class="chip">{{ c.name }}</span>{% endif %}{% endfor %}
+              </div>
+            {% endif %}
+            <div class="metaline" style="margin-top:8px">
+              {% if rc.latest %}{{ rc.latest.found_candidates }} found · {{ rc.latest.fit_candidates }} fit · {{ rc.latest.drafted }} drafts{% else %}Not sourced yet{% endif %}
+            </div>
+          </div>
+          <a class="btn" href="/ui/sourcing/roles/{{ rc.role.id }}/?tenant={{ tenant.id }}">Open →</a>
         </div>
-        <a class="btn" href="/ui/sourcing/roles/{{ role.id }}/?tenant={{ tenant.id }}">View leads →</a>
       </div>
     {% empty %}
-      <div class="card">No roles yet — create your first one above.</div>
+      <div class="card empty">No roles yet — create your first one above.</div>
     {% endfor %}
   {% endif %}
 {% endblock %}

@@ -90,6 +90,30 @@
     .live .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2a5bd7;
                margin-right:6px;animation:pulse 1.2s infinite}
     @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+    /* page header + KPI tiles */
+    .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .tiles{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 22px}
+    .tile{flex:1;min-width:124px;margin:0;padding:14px 16px}
+    .tile .l{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+             font-weight:600}
+    .tile .n{font-family:var(--serif);font-size:27px;line-height:1.1;margin-top:3px;
+             font-variant-numeric:tabular-nums}
+    .tile .n.accent{color:var(--accent-700)} .tile .n.good{color:var(--met)}
+
+    /* labels, meta, evidence */
+    .lab{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+    .metaline{color:var(--muted);font-size:13.5px}
+    .headline{color:var(--muted);font-size:13px;font-style:italic;margin-top:3px}
+    .reasons{margin:9px 0 0;padding:0;list-style:none;color:#5d5848;font-size:12.5px}
+    .reasons li{position:relative;padding-left:16px;margin:2px 0}
+    .reasons li:before{content:"›";position:absolute;left:3px;color:var(--accent);font-weight:700}
+    .dropline{margin-top:9px;font-size:13px;color:#9a6a55}
+    .kv{display:grid;grid-template-columns:120px 1fr;gap:8px 14px;align-items:start}
+    .kv .lab{padding-top:3px}
+    .empty{color:var(--muted);text-align:center;padding:30px 10px}
+    .when{color:var(--muted);font-size:12.5px;white-space:nowrap}
+    a.plain,a.plain:hover{color:var(--ink);text-decoration:none}
   </style>
 </head>
 <body>
@@ -99,8 +123,8 @@
       <nav class="nav">
         <a class="{% if nav == 'roles' %}active{% endif %}" href="/ui/sourcing/{% if tenant %}?tenant={{ tenant.id }}{% endif %}">
           <span class="ic">🗂️</span> Roles</a>
-        <a class="{% if nav == 'pipeline' %}active{% endif %}" href="/ui/sourcing/pipeline/{% if tenant %}?tenant={{ tenant.id }}{% endif %}">
-          <span class="ic">📥</span> Pipeline</a>
+        <a class="{% if nav == 'outreach' %}active{% endif %}" href="/ui/sourcing/outreach/{% if tenant %}?tenant={{ tenant.id }}{% endif %}">
+          <span class="ic">✉️</span> Outreach</a>
       </nav>
       <div class="side-spacer"></div>
       {% if tenant %}

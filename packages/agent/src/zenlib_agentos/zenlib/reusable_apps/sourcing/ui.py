@@ -21,8 +21,27 @@ from .models import (
     OutreachDraft,
     Role,
     SourcingRun,
+    TargetCompany,
 )
 from .usage import role_cost
+
+
+def _latest_run(role: Role) -> SourcingRun | None:
+    runs = sorted(role.runs.all(), key=lambda r: r.created_at, reverse=True)
+    return runs[0] if runs else None
+
+
+def _role_card(role: Role) -> dict:
+    """Summary shown on the roles list — ICP at a glance + the latest run's tally."""
+    icp = role.icp or {}
+    return {
+        "role": role,
+        "latest": _latest_run(role),
+        "skills": icp.get("must_have_skills", []),
+        "companies": [c.get("name") for c in icp.get("target_companies", [])
+                      if c.get("name")],
+        "rubric": icp.get("rubric", []),
+    }
 
 # A sensible default rubric so a role created from the portal scores richly
 # out of the box. The recruiter can refine criteria/weights later via the API.
@@ -66,21 +85,23 @@ def roles_index(request):
         return render(request, "sourcing/roles.html",
                       {"tenant": None, "roles": [], "tenants": []})
     _activate(tenant)
+    roles = Role.objects.prefetch_related("runs").all()
     return render(request, "sourcing/roles.html", {
         "tenant": tenant,
         "tenants": Tenant.objects.filter(is_active=True),
-        "roles": Role.objects.all(),
+        "role_cards": [_role_card(r) for r in roles],
         "nav": "roles",
     })
 
 
-def pipeline(request):
+def outreach_queue(request):
     """Cross-role outreach queue — every candidate Jill has drafted, grouped by
     status, so the recruiter's whole approval queue lives in one place."""
     tenant = _resolve_tenant(request)
     if tenant is None:
-        return render(request, "sourcing/pipeline.html",
-                      {"tenant": None, "drafts": [], "counts": {}, "nav": "pipeline"})
+        return render(request, "sourcing/outreach.html",
+                      {"tenant": None, "drafts": [], "stat_cards": [],
+                       "nav": "outreach"})
     _activate(tenant)
     order = {"draft": 0, "approved": 1, "sent": 2, "rejected": 3}
     drafts = sorted(
@@ -91,15 +112,15 @@ def pipeline(request):
     for draft in drafts:
         counts[draft.status] = counts.get(draft.status, 0) + 1
     stat_cards = [
-        ("Awaiting approval", counts["draft"]),
-        ("Approved", counts["approved"]),
-        ("Sent", counts["sent"]),
-        ("Rejected", counts["rejected"]),
+        ("Awaiting approval", counts["draft"], "accent"),
+        ("Approved", counts["approved"], ""),
+        ("Sent", counts["sent"], "good"),
+        ("Rejected", counts["rejected"], ""),
     ]
-    return render(request, "sourcing/pipeline.html", {
+    return render(request, "sourcing/outreach.html", {
         "tenant": tenant,
         "tenants": Tenant.objects.filter(is_active=True),
-        "drafts": drafts, "stat_cards": stat_cards, "nav": "pipeline",
+        "drafts": drafts, "stat_cards": stat_cards, "nav": "outreach",
     })
 
 
@@ -181,13 +202,24 @@ def role_detail(request, role_id: int):
     leads.sort(key=lambda x: x["score"].score, reverse=True)
 
     drafts = OutreachDraft.objects.filter(role=role).select_related("candidate")
-    runs = SourcingRun.objects.filter(role=role).order_by("-created_at")[:5]
+    runs = list(SourcingRun.objects.filter(role=role).order_by("-created_at")[:5])
+    targets = list(TargetCompany.objects.filter(role=role).order_by("depth", "name"))
+    icp = role.icp or {}
     # Auto-refresh the page while a run is still in flight so status/counters
     # update without a manual reload.
     active = any(r.status in ("pending", "running") for r in runs)
+    fit = sum(1 for lead in leads if lead["score"].verdict == "fit")
+    summary = [
+        ("Companies", len(targets), ""),
+        ("Leads", len(leads), ""),
+        ("Fit", fit, "good"),
+        ("Drafts", drafts.count(), "accent"),
+    ]
     return render(request, "sourcing/role_detail.html", {
         "tenant": tenant, "role": role, "leads": leads, "drafts": drafts,
         "runs": runs, "auto_refresh": active, "nav": "roles",
+        "targets": targets, "skills": icp.get("must_have_skills", []),
+        "rubric": icp.get("rubric", []), "summary": summary,
         "linkedin": LinkedInAccount.objects.first(),
         "cost": role_cost(role),
     })

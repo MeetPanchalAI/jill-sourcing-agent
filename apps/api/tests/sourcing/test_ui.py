@@ -89,7 +89,7 @@ def test_provenance_is_scoped_to_the_current_role(client, tenant_a, in_tenant):
     assert body.count("recent_joiner ←") == 1  # only Role A's edge, no leakage
 
 
-def test_pipeline_lists_outreach_across_roles(client, tenant_a, in_tenant):
+def test_outreach_queue_lists_across_roles(client, tenant_a, in_tenant):
     with in_tenant(tenant_a):
         _set_rls(tenant_a)
         role_a = Role.objects.create(title="Role A", icp={})
@@ -102,7 +102,7 @@ def test_pipeline_lists_outreach_across_roles(client, tenant_a, in_tenant):
                                      channel=OutreachDraft.Channel.EMAIL, body="hi A")
         OutreachDraft.objects.create(candidate=cand_b, role=role_b, body="hi B",
                                      channel=OutreachDraft.Channel.LINKEDIN)
-    resp = client.get(f"/ui/sourcing/pipeline/?tenant={tenant_a.id}")
+    resp = client.get(f"/ui/sourcing/outreach/?tenant={tenant_a.id}")
     assert resp.status_code == 200
     body = resp.content.decode()
     assert "A Person" in body and "B Person" in body
