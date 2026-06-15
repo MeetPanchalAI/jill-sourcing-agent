@@ -11,6 +11,15 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
+# Load a repo-root .env (live keys for local dev). No-op if python-dotenv isn't
+# installed or no file is found; real deployments use the process environment.
+try:
+    from dotenv import find_dotenv, load_dotenv
+
+    load_dotenv(find_dotenv(usecwd=True))
+except ModuleNotFoundError:  # pragma: no cover
+    pass
+
 
 def _int(name: str, default: int) -> int:
     return int(os.environ.get(name, default))

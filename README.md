@@ -171,8 +171,9 @@ All optional — defaults cover local development. Override via environment vari
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` / `DB_HOST` / `DB_PORT` | `zenapi` / `zen` / `zen` / `localhost` / `5432` | database connection |
 | `TEMPORAL_ADDRESS` | `localhost:7233` | Temporal server address |
 
-Switching to live mode is just `JILL_MODE=live` plus the relevant keys — no code
-change. See `apps/api/.env.example`.
+Copy `.env.example` to `.env` and fill in any secrets — it is loaded
+automatically. Switching to live mode is just `JILL_MODE=live` plus the relevant
+keys; no code change.
 
 ---
 

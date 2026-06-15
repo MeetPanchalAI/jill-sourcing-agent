@@ -14,6 +14,15 @@ from pathlib import Path
 # apps/api/src/zenapi/config/settings/__init__.py → apps/api/
 BASE_DIR = Path(__file__).resolve().parents[4]
 
+# Load a repo-root .env for local development (apps/api → apps → repo root).
+# No-op if python-dotenv isn't installed; production reads the real environment.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(BASE_DIR.parent.parent / ".env")
+except ModuleNotFoundError:
+    pass
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-do-not-use-in-prod")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = ["*"] if DEBUG else os.environ.get("ALLOWED_HOSTS", "").split(",")
