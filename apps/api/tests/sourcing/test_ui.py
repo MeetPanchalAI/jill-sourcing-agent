@@ -64,6 +64,52 @@ def test_ui_is_tenant_isolated(client, tenant_a, tenant_b, in_tenant):
         assert "Alice Nguyen" not in resp.content.decode()
 
 
+def test_provenance_is_scoped_to_the_current_role(client, tenant_a, in_tenant):
+    """A candidate sourced for several roles has one edge per role; the role page
+    must show only *this* role's edge, not every role's (the duplicate-chip bug)."""
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        role_a = Role.objects.create(title="Role A", icp={})
+        role_b = Role.objects.create(title="Role B", icp={})
+        company_a = TargetCompany.objects.create(role=role_a, name="Vapi")
+        company_b = TargetCompany.objects.create(role=role_b, name="Vapi")
+        cand = Candidate.objects.create(
+            linkedin_url="https://linkedin.com/in/alice", full_name="Alice Nguyen",
+        )
+        Score.objects.create(candidate=cand, role=role_a, score=90,
+                             verdict=Score.Verdict.FIT)
+        rj = LeadEdge.Kind.RECENT_JOINER
+        LeadEdge.objects.create(role=role_a, to_candidate=cand, kind=rj,
+                                from_company=company_a)
+        LeadEdge.objects.create(role=role_b, to_candidate=cand, kind=rj,
+                                from_company=company_b)
+    body = client.get(
+        f"/ui/sourcing/roles/{role_a.id}/?tenant={tenant_a.id}"
+    ).content.decode()
+    assert body.count("recent_joiner ←") == 1  # only Role A's edge, no leakage
+
+
+def test_pipeline_lists_outreach_across_roles(client, tenant_a, in_tenant):
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        role_a = Role.objects.create(title="Role A", icp={})
+        role_b = Role.objects.create(title="Role B", icp={})
+        cand_a = Candidate.objects.create(
+            linkedin_url="https://linkedin.com/in/a", full_name="A Person")
+        cand_b = Candidate.objects.create(
+            linkedin_url="https://linkedin.com/in/b", full_name="B Person")
+        OutreachDraft.objects.create(candidate=cand_a, role=role_a,
+                                     channel=OutreachDraft.Channel.EMAIL, body="hi A")
+        OutreachDraft.objects.create(candidate=cand_b, role=role_b, body="hi B",
+                                     channel=OutreachDraft.Channel.LINKEDIN)
+    resp = client.get(f"/ui/sourcing/pipeline/?tenant={tenant_a.id}")
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "A Person" in body and "B Person" in body
+    assert "Role A" in body and "Role B" in body
+    assert "Awaiting approval" in body
+
+
 def test_approve_from_ui_transitions_draft(client, tenant_a, in_tenant):
     with in_tenant(tenant_a):
         _set_rls(tenant_a)

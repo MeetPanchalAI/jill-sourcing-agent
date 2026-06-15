@@ -97,9 +97,10 @@
     <aside class="sidebar">
       <div class="brand"><span class="spark">✳</span> <span>Jack<b>&amp;</b>Jill</span></div>
       <nav class="nav">
-        <a class="active" href="/ui/sourcing/{% if tenant %}?tenant={{ tenant.id }}{% endif %}">
+        <a class="{% if nav == 'roles' %}active{% endif %}" href="/ui/sourcing/{% if tenant %}?tenant={{ tenant.id }}{% endif %}">
           <span class="ic">🗂️</span> Roles</a>
-        <a href="/ui/sourcing/{% if tenant %}?tenant={{ tenant.id }}{% endif %}"><span class="ic">📥</span> Pipeline</a>
+        <a class="{% if nav == 'pipeline' %}active{% endif %}" href="/ui/sourcing/pipeline/{% if tenant %}?tenant={{ tenant.id }}{% endif %}">
+          <span class="ic">📥</span> Pipeline</a>
       </nav>
       <div class="side-spacer"></div>
       {% if tenant %}

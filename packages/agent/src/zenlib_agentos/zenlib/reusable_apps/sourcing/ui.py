@@ -70,6 +70,36 @@ def roles_index(request):
         "tenant": tenant,
         "tenants": Tenant.objects.filter(is_active=True),
         "roles": Role.objects.all(),
+        "nav": "roles",
+    })
+
+
+def pipeline(request):
+    """Cross-role outreach queue — every candidate Jill has drafted, grouped by
+    status, so the recruiter's whole approval queue lives in one place."""
+    tenant = _resolve_tenant(request)
+    if tenant is None:
+        return render(request, "sourcing/pipeline.html",
+                      {"tenant": None, "drafts": [], "counts": {}, "nav": "pipeline"})
+    _activate(tenant)
+    order = {"draft": 0, "approved": 1, "sent": 2, "rejected": 3}
+    drafts = sorted(
+        OutreachDraft.objects.select_related("candidate", "role"),
+        key=lambda d: (order.get(d.status, 9), -d.id),
+    )
+    counts = {status: 0 for status in order}
+    for draft in drafts:
+        counts[draft.status] = counts.get(draft.status, 0) + 1
+    stat_cards = [
+        ("Awaiting approval", counts["draft"]),
+        ("Approved", counts["approved"]),
+        ("Sent", counts["sent"]),
+        ("Rejected", counts["rejected"]),
+    ]
+    return render(request, "sourcing/pipeline.html", {
+        "tenant": tenant,
+        "tenants": Tenant.objects.filter(is_active=True),
+        "drafts": drafts, "stat_cards": stat_cards, "nav": "pipeline",
     })
 
 
@@ -143,7 +173,9 @@ def role_detail(request, role_id: int):
                          else f"candidate {e.from_candidate_id}"),
                 "method": e.method,
             }
-            for e in c.inbound_edges.all()
+            # Only edges for *this* role — a candidate sourced for several roles
+            # has one edge per role, which would otherwise look like duplicates.
+            for e in c.inbound_edges.all() if e.role_id == role.id
         ]
         leads.append({"candidate": c, "score": score, "provenance": provenance})
     leads.sort(key=lambda x: x["score"].score, reverse=True)
@@ -155,7 +187,7 @@ def role_detail(request, role_id: int):
     active = any(r.status in ("pending", "running") for r in runs)
     return render(request, "sourcing/role_detail.html", {
         "tenant": tenant, "role": role, "leads": leads, "drafts": drafts,
-        "runs": runs, "auto_refresh": active,
+        "runs": runs, "auto_refresh": active, "nav": "roles",
         "linkedin": LinkedInAccount.objects.first(),
         "cost": role_cost(role),
     })
@@ -182,6 +214,10 @@ def outreach_action(request, draft_id: int, action: str):
             draft.reject(reason=request.POST.get("reason", ""))
     except ValidationError:
         pass  # illegal transition — ignore, the list reflects current state
+    # Return to wherever the action was taken (the role page or the pipeline).
+    nxt = request.POST.get("next")
+    if nxt:
+        return redirect(f"{nxt}{'&' if '?' in nxt else '?'}tenant={tenant.id}")
     return redirect(f"/ui/sourcing/roles/{draft.role_id}/?tenant={tenant.id}")
 
 
