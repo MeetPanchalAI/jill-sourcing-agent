@@ -1,21 +1,39 @@
-{% comment %}Expandable outreach message — click the preview to read, and edit a
-draft in place before approving. Expects: draft, tenant, next_url.{% endcomment %}
-<details class="msg">
-  <summary><span class="pre">{% if draft.subject %}<b>{{ draft.subject }}</b> — {% endif %}{{ draft.body }}</span></summary>
-  {% if draft.status == 'draft' %}
-    <form class="msg-edit" method="post" action="/ui/sourcing/outreach/{{ draft.id }}/edit/?tenant={{ tenant.id }}">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ next_url }}">
-      {% if draft.channel == 'email' %}
-        <input class="btn msg-subj-in" name="subject" value="{{ draft.subject }}" placeholder="Subject">
-      {% endif %}
-      <textarea class="btn msg-body-in" name="body" rows="6">{{ draft.body }}</textarea>
-      <div class="msg-actions">
-        <button class="primary">Save changes</button>
-        <span class="muted" style="font-size:12px">Refine the draft before you approve it.</span>
+{% comment %}Outreach message: a one-line preview that opens a review/edit drawer.
+Expects: draft, tenant, next_url.{% endcomment %}
+<button type="button" class="msg-open" data-open="dlg-{{ draft.id }}">
+  <span class="pre">{% if draft.subject %}<b>{{ draft.subject }}</b> — {% endif %}{{ draft.body }}</span>
+</button>
+
+<dialog id="dlg-{{ draft.id }}" class="sheet">
+  <div class="sheet-in">
+    <div class="sheet-h">
+      <div style="flex:1;min-width:0">
+        <div class="sheet-name">{{ draft.candidate.full_name|default:draft.candidate.linkedin_url }}</div>
+        <div class="muted" style="font-size:12.5px;margin-top:3px">{{ draft.get_channel_display }} · {{ draft.role.title }}</div>
       </div>
-    </form>
-  {% else %}
-    <div class="msg-full">{% if draft.subject %}<div class="msg-subj">{{ draft.subject }}</div>{% endif %}{{ draft.body }}</div>
-  {% endif %}
-</details>
+      <span class="pill {{ draft.status }}">{{ draft.get_status_display }}</span>
+      <button type="button" class="x" data-close aria-label="Close">✕</button>
+    </div>
+
+    {% if draft.status == 'draft' %}
+      <form method="post" action="/ui/sourcing/outreach/{{ draft.id }}/edit/?tenant={{ tenant.id }}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next_url }}">
+        {% if draft.channel == 'email' %}
+          <label class="fl" for="subj-{{ draft.id }}">Subject</label>
+          <input class="fld" id="subj-{{ draft.id }}" name="subject" value="{{ draft.subject }}">
+        {% endif %}
+        <label class="fl" for="body-{{ draft.id }}">Message</label>
+        <textarea class="fld" id="body-{{ draft.id }}" name="body">{{ draft.body }}</textarea>
+        <div class="sheet-f">
+          <button class="primary" name="intent" value="approve">Approve &amp; send</button>
+          <button name="intent" value="save">Save draft</button>
+          <button class="linklike" name="intent" value="reject">Reject</button>
+        </div>
+      </form>
+    {% else %}
+      {% if draft.subject %}<div class="sheet-subj">{{ draft.subject }}</div>{% endif %}
+      <div class="sheet-read">{{ draft.body }}</div>
+    {% endif %}
+  </div>
+</dialog>

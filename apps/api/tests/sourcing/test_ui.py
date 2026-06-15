@@ -142,6 +142,23 @@ def test_edit_draft_message_from_ui(client, tenant_a, in_tenant):
         assert draft.subject == "New subject"
 
 
+def test_edit_then_approve_in_one_submit(client, tenant_a, in_tenant):
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        _, _, draft = _seed(tenant_a)
+    resp = client.post(
+        f"/ui/sourcing/outreach/{draft.id}/edit/?tenant={tenant_a.id}",
+        {"body": "Final wording.", "intent": "approve",
+         "next": "/ui/sourcing/outreach/"},
+    )
+    assert resp.status_code == 302
+    with in_tenant(tenant_a):
+        _set_rls(tenant_a)
+        draft.refresh_from_db()
+        assert draft.body == "Final wording."          # edit saved
+        assert draft.status == OutreachDraft.Status.APPROVED  # and approved
+
+
 def test_edit_is_ignored_after_approval(client, tenant_a, in_tenant):
     with in_tenant(tenant_a):
         _set_rls(tenant_a)

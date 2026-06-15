@@ -142,14 +142,7 @@
           <td>{{ d.get_channel_display }}</td>
           <td>{% include "sourcing/_message_cell.html" with draft=d next_url=request.path %}</td>
           <td><span class="pill {{ d.status }}">{{ d.get_status_display }}</span></td>
-          <td style="white-space:nowrap">
-            {% if d.status == 'draft' %}
-              <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/approve/?tenant={{ tenant.id }}">
-                {% csrf_token %}<button class="primary">Approve</button></form>
-              <form class="inline" method="post" action="/ui/sourcing/outreach/{{ d.id }}/reject/?tenant={{ tenant.id }}">
-                {% csrf_token %}<button>Reject</button></form>
-            {% else %}—{% endif %}
-          </td>
+          <td style="text-align:right"><button class="chev" data-open="dlg-{{ d.id }}" aria-label="Review">›</button></td>
         </tr>
       {% empty %}
         <tr><td colspan="5" class="empty">No drafts yet.</td></tr>

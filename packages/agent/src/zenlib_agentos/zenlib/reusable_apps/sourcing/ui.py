@@ -57,6 +57,18 @@ DEFAULT_RUBRIC = [
 ]
 
 
+def _approve_and_send(draft: OutreachDraft) -> None:
+    """Approve a draft and, for a LinkedIn invite, send it through the connected
+    account immediately (mock delivery), respecting the daily cap. Email stays
+    approved and is sent via the email provider separately."""
+    draft.approve(by="ui")
+    if draft.channel == OutreachDraft.Channel.LINKEDIN:
+        acct = LinkedInAccount.objects.first()
+        if acct and acct.can_invite():
+            draft.mark_sent()
+            acct.record_invite()
+
+
 def _resolve_tenant(request) -> Tenant | None:
     tid = request.GET.get("tenant") or request.POST.get("tenant")
     if tid:
@@ -201,7 +213,7 @@ def role_detail(request, role_id: int):
         leads.append({"candidate": c, "score": score, "provenance": provenance})
     leads.sort(key=lambda x: x["score"].score, reverse=True)
 
-    drafts = OutreachDraft.objects.filter(role=role).select_related("candidate")
+    drafts = OutreachDraft.objects.filter(role=role).select_related("candidate", "role")
     runs = list(SourcingRun.objects.filter(role=role).order_by("-created_at")[:5])
     targets = list(TargetCompany.objects.filter(role=role).order_by("depth", "name"))
     icp = role.icp or {}
@@ -235,23 +247,21 @@ def outreach_action(request, draft_id: int, action: str):
     draft = get_object_or_404(OutreachDraft, id=draft_id)
     try:
         if action == "edit":
-            # Recruiter refines the AI draft before approving — drafts only.
+            # Review drawer: save the recruiter's wording, then act on it in the
+            # same submit (intent) so edits are never lost. Drafts only.
             if draft.status == OutreachDraft.Status.DRAFT:
                 body = request.POST.get("body", "").strip()
                 draft.subject = request.POST.get("subject", draft.subject).strip()
                 if body:
                     draft.body = body
                 draft.save()
+                intent = request.POST.get("intent", "save")
+                if intent == "approve":
+                    _approve_and_send(draft)
+                elif intent == "reject":
+                    draft.reject(reason=request.POST.get("reason", ""))
         elif action == "approve":
-            draft.approve(by="ui")
-            # One-click "take action": for a LinkedIn invite, send it through the
-            # connected account immediately (mock delivery), respecting the daily
-            # cap. Email stays approved (sent via Instantly separately).
-            if draft.channel == OutreachDraft.Channel.LINKEDIN:
-                acct = LinkedInAccount.objects.first()
-                if acct and acct.can_invite():
-                    draft.mark_sent()
-                    acct.record_invite()
+            _approve_and_send(draft)
         elif action == "reject":
             draft.reject(reason=request.POST.get("reason", ""))
     except ValidationError:

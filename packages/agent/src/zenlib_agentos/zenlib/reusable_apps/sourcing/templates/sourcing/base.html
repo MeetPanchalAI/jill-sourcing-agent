@@ -134,25 +134,43 @@
       .brief > div:first-child{border-top:none}
     }
 
-    /* expandable outreach message (native <details>, no JS) */
-    .msg{max-width:560px}
-    .msg summary{cursor:pointer;list-style:none;color:var(--muted);font-size:13.5px;
-                 display:flex;gap:7px;align-items:baseline}
-    .msg summary::-webkit-details-marker{display:none}
-    .msg summary::before{content:"▸";color:var(--accent);font-size:11px;flex:none;
-                         transition:transform .15s;transform:translateY(-1px)}
-    .msg[open] summary::before{transform:rotate(90deg) translateX(-1px)}
-    .msg summary b{color:var(--ink)} .msg summary:hover{color:var(--ink)}
-    .msg summary .pre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .msg[open] summary .pre{white-space:normal}
-    .msg-full{margin-top:9px;background:var(--cream);border:1px solid var(--line);
-              border-radius:10px;padding:12px 14px;white-space:pre-wrap;
-              font-size:13.5px;line-height:1.55;color:#3a3730}
-    .msg-subj{font-weight:600;color:var(--ink);margin-bottom:6px}
-    .msg-edit{margin-top:9px}
-    .msg-subj-in{display:block;width:100%;margin-bottom:7px;font-weight:600}
-    .msg-body-in{display:block;width:100%;font:inherit;line-height:1.55;resize:vertical}
-    .msg-actions{margin-top:8px;display:flex;align-items:center;gap:10px}
+    /* outreach message: a one-line preview that opens a review/edit drawer */
+    .msg-open{display:block;width:100%;max-width:440px;text-align:left;background:none;
+              border:none;padding:0;margin:0;cursor:pointer;font:inherit;color:var(--muted)}
+    .msg-open .pre{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .msg-open b{color:var(--ink);font-weight:600}
+    .msg-open:hover .pre{color:var(--ink)}
+    .chev{border:none;background:none;cursor:pointer;color:var(--muted);font-size:18px;
+          line-height:1;padding:4px 8px;border-radius:8px}
+    .chev:hover{color:var(--accent-700);background:var(--cream)}
+
+    dialog.sheet{margin:0 0 0 auto;height:100vh;max-height:100vh;width:460px;max-width:94vw;
+                 border:none;padding:0;background:var(--paper);border-radius:18px 0 0 18px;
+                 box-shadow:-10px 0 50px rgba(25,22,15,.22)}
+    dialog.sheet::backdrop{background:rgba(22,20,14,.34)}
+    .sheet[open]{animation:slidein .18s ease}
+    @keyframes slidein{from{transform:translateX(24px);opacity:.6}to{transform:none;opacity:1}}
+    .sheet-in{display:flex;flex-direction:column;height:100%;padding:22px 24px}
+    .sheet-h{display:flex;align-items:flex-start;gap:12px;padding-bottom:15px;border-bottom:1px solid var(--line)}
+    .sheet-name{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.2}
+    .sheet .x{margin-left:auto;border:none;background:none;font-size:15px;cursor:pointer;
+              color:var(--muted);padding:4px;line-height:1}
+    .sheet .x:hover{color:var(--ink)}
+    .sheet form{display:flex;flex-direction:column;flex:1;min-height:0}
+    .fl{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+        color:var(--muted);font-weight:600;margin:16px 0 6px}
+    .fld{width:100%;font:inherit;border:1px solid var(--line);background:var(--paper);
+         border-radius:10px;padding:9px 12px}
+    .fld:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+    textarea.fld{line-height:1.6;resize:none;flex:1;min-height:180px}
+    .sheet-f{display:flex;gap:10px;align-items:center;margin-top:16px;padding-top:15px;
+             border-top:1px solid var(--line)}
+    .linklike{border:none;background:none;color:#a23;cursor:pointer;font:inherit;
+              padding:6px 4px;margin-left:auto}
+    .linklike:hover{text-decoration:underline}
+    .sheet-subj{margin-top:16px;font-weight:600;color:var(--ink);font-size:15px}
+    .sheet-read{margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.6;
+                color:#3a3730;overflow:auto}
   </style>
 </head>
 <body>
@@ -174,5 +192,16 @@
     </aside>
     <main class="content">{% block body %}{% endblock %}</main>
   </div>
+  <script>
+    // Open/close the review drawer (native <dialog>). No framework.
+    document.addEventListener('click', function (e) {
+      var open = e.target.closest('[data-open]');
+      if (open) { var d = document.getElementById(open.getAttribute('data-open'));
+                  if (d && d.showModal) d.showModal(); return; }
+      var close = e.target.closest('[data-close]');
+      if (close) { var dl = close.closest('dialog'); if (dl) dl.close(); return; }
+      if (e.target.tagName === 'DIALOG') e.target.close();  // click backdrop to close
+    });
+  </script>
 </body>
 </html>
