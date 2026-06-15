@@ -113,7 +113,7 @@ def build_summary(criteria: list[CriterionResult]) -> str:
     met = [c.name for c in criteria if c.status == "met"]
     n_met = sum(1 for c in criteria if c.status == "met")
     head = ", ".join(met) if met else "no criteria met"
-    return f"{head} — {n_met}/{len(criteria)} criteria met"
+    return f"{head} - {n_met}/{len(criteria)} criteria met"
 
 
 def evaluate_rubric(

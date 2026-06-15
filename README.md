@@ -109,23 +109,43 @@ docker compose -f apps/api/docker-compose.yml up -d db
 # apply migrations
 uv run python apps/api/manage.py migrate
 
-# create a tenant (prints its id, e.g. 1)
-uv run python apps/api/manage.py shell -c \
-  "from zenlib.reusable_apps.multitenant.models import Tenant; \
-   print(Tenant.objects.create(name='Acme', slug='acme', service_token='x').id)"
+# create a tenant — prints its id (e.g. 1); single line, works in any shell
+uv run python apps/api/manage.py shell -c "from zenlib.reusable_apps.multitenant.models import Tenant; print(Tenant.objects.create(name='Acme', slug='acme', service_token='x').id)"
 
 # run the API + dashboard
 uv run python apps/api/manage.py runserver 8000
 ```
 
-In a second terminal, drive it with the CLI (replace `1` with your tenant id):
+> The setup commands above (`uv run …`, `docker compose …`) are identical on macOS,
+> Linux, and Windows. Only the per-shell CLI commands below differ.
+
+In a second terminal, drive it with the CLI. `role create` prints a role id — use
+**that** id (not necessarily `1`) for `source` and `leads`. Use your tenant id for
+`JILL_TENANT_ID` (the seed command above prints it).
+
+**macOS / Linux (bash, zsh):**
 
 ```bash
+export JILL_TENANT_ID=1
 echo '{"target_companies":[{"name":"Vapi"}],"must_have_skills":["Python","Realtime Audio"]}' > icp.json
-JILL_TENANT_ID=1 uv run jill role create --title "Voice AI Engineer" --icp icp.json
-JILL_TENANT_ID=1 uv run jill source 1     # runs the crawl in-process
-JILL_TENANT_ID=1 uv run jill leads 1
+uv run jill role create --title "Voice AI Engineer" --icp icp.json   # prints: role <N> created
+uv run jill source <N>
+uv run jill leads <N>
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:JILL_TENANT_ID = "1"
+'{"target_companies":[{"name":"Vapi"}],"must_have_skills":["Python","Realtime Audio"]}' | Set-Content icp.json -Encoding utf8
+uv run jill role create --title "Voice AI Engineer" --icp icp.json   # prints: role <N> created
+uv run jill source <N>
+uv run jill leads <N>
+```
+
+> The two shells differ in how they set environment variables (`export VAR=…` vs
+> `$env:VAR='…'`) and how they write files (PowerShell's `>` produces UTF-16, so use
+> `Set-Content -Encoding utf8`).
 
 Open the dashboard: **http://localhost:8000/ui/sourcing/?tenant=1** — ranked leads
 with rubric chips and provenance, live run status, spend, and one-click approve.

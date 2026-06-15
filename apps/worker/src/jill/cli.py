@@ -227,10 +227,10 @@ def leads(
     if min_score is not None:
         params["min_score"] = min_score
     for lead in _client(tenant).leads(role_id, **params):
-        prov = ", ".join(p["kind"] for p in lead.get("provenance", [])) or "—"
+        prov = ", ".join(p["kind"] for p in lead.get("provenance", [])) or "-"
         typer.echo(
             f"[{lead.get('score')}] {lead.get('full_name')} "
-            f"({lead.get('current_company')}) — {lead.get('verdict')} via {prov}"
+            f"({lead.get('current_company')}) - {lead.get('verdict')} via {prov}"
         )
         if lead.get("summary"):
             typer.secho(f"     {lead['summary']}", fg=typer.colors.BRIGHT_BLACK)
@@ -242,10 +242,10 @@ def costs(role_id: int, tenant: int = typer.Option(None)):
     c = _client(tenant).costs(role_id)
     typer.secho(f"${c['total_usd']}", fg=typer.colors.GREEN, bold=True)
     typer.echo(
-        f"  {c['scrapes']} scrapes ({c['brightdata_cents']}¢) · "
-        f"{c['llm_calls']} Claude calls ({c['llm_cents']}¢) · "
+        f"  {c['scrapes']} scrapes ({c['brightdata_cents']}c) - "
+        f"{c['llm_calls']} Claude calls ({c['llm_cents']}c) - "
         f"{c['invites_sent']} invites + {c['emails_sent']} emails "
-        f"({c['outreach_cents']}¢)"
+        f"({c['outreach_cents']}c)"
     )
 
 
@@ -258,7 +258,7 @@ def linkedin_connect(
 ):
     """Connect a LinkedIn account so Jill can send invites through it."""
     out = _client(tenant).linkedin_connect(account_name, session_cookie)
-    typer.secho(f"connected {out.data['account_name']} — "
+    typer.secho(f"connected {out.data['account_name']} - "
                 f"{out.data['invites_remaining']} invites/day available",
                 fg=typer.colors.GREEN)
 
@@ -269,7 +269,7 @@ def linkedin_status(tenant: int = typer.Option(None)):
     if not acct:
         typer.echo("no LinkedIn account connected")
         return
-    typer.echo(f"{acct['account_name']}: {acct['status']} · "
+    typer.echo(f"{acct['account_name']}: {acct['status']} - "
                f"{acct['invites_remaining']}/{acct['daily_invite_limit']} "
                "invites left today")
 
