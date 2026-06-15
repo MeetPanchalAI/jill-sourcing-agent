@@ -19,26 +19,7 @@
     {% endfor %}
   </div>
 
-  <!-- What Jill is sourcing for: monitored companies + skills + rubric -->
-  <div class="card">
-    <div class="kv">
-      <div class="lab">Monitoring</div>
-      <div class="chips">
-        {% for t in targets %}<span class="chip prov">{{ t.name }}{% if t.depth %} · d{{ t.depth }}{% endif %}</span>
-        {% empty %}<span class="muted">Seed companies appear here once sourcing runs.</span>{% endfor %}
-      </div>
-      {% if skills %}
-        <div class="lab">Must-have</div>
-        <div class="chips">{% for s in skills %}<span class="chip met">{{ s }}</span>{% endfor %}</div>
-      {% endif %}
-      {% if rubric %}
-        <div class="lab">Scoring rubric</div>
-        <div class="chips">{% for c in rubric %}<span class="chip" title="type: {{ c.type }}">{{ c.name }} <span class="muted">×{{ c.weight }}</span></span>{% endfor %}</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
     <!-- LinkedIn connection (Gojiberry-style) -->
     <div class="card" style="flex:1;min-width:280px;margin-bottom:0">
       <div class="row" style="gap:10px">
@@ -73,6 +54,25 @@
         <span class="chip">Claude {{ cost.llm_cents|floatformat:1 }}¢</span>
         <span class="chip">Outreach {{ cost.outreach_cents|floatformat:1 }}¢</span>
       </div>
+    </div>
+  </div>
+
+  <!-- Search brief: what Jill is sourcing for -->
+  <div class="card brief">
+    <div>
+      <div class="brief-h"><span class="ic">🎯</span> Monitoring</div>
+      <div class="chips">
+        {% for t in targets %}<span class="chip {% if t.depth %}prov{% else %}seed{% endif %}">{{ t.name }}{% if t.depth %}<span class="dep">d{{ t.depth }}</span>{% endif %}</span>
+        {% empty %}<span class="muted">Companies appear here once sourcing runs.</span>{% endfor %}
+      </div>
+    </div>
+    <div>
+      <div class="brief-h"><span class="ic">🧩</span> Must-have</div>
+      <div class="chips">{% for s in skills %}<span class="chip met">{{ s }}</span>{% empty %}<span class="muted">—</span>{% endfor %}</div>
+    </div>
+    <div>
+      <div class="brief-h"><span class="ic">⚖️</span> Scoring rubric</div>
+      <div class="chips">{% for c in rubric %}<span class="chip {% if c.weight >= 2 %}key{% endif %}" title="type: {{ c.type }} · weight {{ c.weight }}">{{ c.name }}<span class="wt">{{ c.weight }}</span></span>{% endfor %}</div>
     </div>
   </div>
 

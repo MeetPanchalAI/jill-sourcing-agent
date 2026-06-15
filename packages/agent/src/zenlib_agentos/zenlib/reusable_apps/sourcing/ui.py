@@ -219,7 +219,9 @@ def role_detail(request, role_id: int):
         "tenant": tenant, "role": role, "leads": leads, "drafts": drafts,
         "runs": runs, "auto_refresh": active, "nav": "roles",
         "targets": targets, "skills": icp.get("must_have_skills", []),
-        "rubric": icp.get("rubric", []), "summary": summary,
+        "rubric": sorted(icp.get("rubric", []),
+                         key=lambda c: -c.get("weight", 1)),
+        "summary": summary,
         "linkedin": LinkedInAccount.objects.first(),
         "cost": role_cost(role),
     })
