@@ -60,11 +60,10 @@
       <div class="lab">Estimated spend</div>
       <div style="font-family:var(--serif);font-size:28px;margin:3px 0 6px">${{ cost.total_usd }}</div>
       <div class="metaline" style="font-size:12.5px">
-        {{ cost.scrapes }} scrapes · {{ cost.enrichments }} enrichments · {{ cost.llm_calls }} Claude calls
+        {{ cost.scrapes }} profiles · {{ cost.llm_calls }} Claude calls · {{ cost.invites_sent }} invites
       </div>
       <div class="chips">
         <span class="chip">Brightdata {{ cost.brightdata_cents|floatformat:1 }}¢</span>
-        <span class="chip">Apify {{ cost.apify_cents|floatformat:1 }}¢</span>
         <span class="chip">Claude {{ cost.llm_cents|floatformat:1 }}¢</span>
         <span class="chip">Outreach {{ cost.outreach_cents|floatformat:1 }}¢</span>
       </div>

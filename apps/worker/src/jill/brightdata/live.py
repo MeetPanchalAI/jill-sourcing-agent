@@ -1,23 +1,25 @@
-"""Live LinkedIn data client.
+"""Live LinkedIn data client — Brightdata **Dataset Filter API**.
 
-Brightdata is the *surfacing* layer (trigger → poll → download a snapshot):
+Instead of scraping LinkedIn live (which now returns login-walled stubs), we query
+Brightdata's resident People-Profiles dataset by filter, which returns *complete*
+profiles (experience / education / about / people_also_viewed):
 
-* ``company_employees(url)`` → the members LinkedIn lists on a company page.
-* ``network(profile)``       → a related-people cohort via ``people_also_viewed``.
+* ``company_employees(url)`` → filter ``current_company_company_id = <slug>`` →
+  every resident profile at that company, in one job. This surfaces the people
+  *and* gives the deep detail the rubric scores on (no separate enrichment step —
+  this is what replaces Apify). The full profiles are cached so the pipeline's
+  per-candidate ``profile()`` call is served from memory, not a second query.
+* ``profile(url)``           → cache hit, else filter ``linkedin_id = <slug>``.
+* ``network(profile)``       → related people via the record's ``people_also_viewed``.
 
-Profiles are *enriched* through Apify (``jill.enrich``) when an ``APIFY_TOKEN`` is
-set — Brightdata returns only name/title/recent-school, too thin for the rubric.
-If Apify is unavailable (run quota, un-approved actor), ``profile()`` falls back to
-the Brightdata profile dataset (shallow) so a run still completes.
-
-Dataset ids come from ``Settings`` (env-overridable). Every request, snapshot
-status, and record count is logged (identifiers + counts, never profile text, C4);
-real scrapes are slow and cost money, so live runs are tightly bounded
-(see ``config.live_max_*``).
+A filter job is async (start → poll the snapshot download until ready, ≤5 min).
+Dataset id + per-company record cap come from ``Settings`` (env-overridable).
+Identifiers + counts are logged, never profile text (C4).
 """
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 import time
@@ -37,9 +39,8 @@ from .types import EmployeeRef, Experience, Profile
 
 logger = logging.getLogger("jill.brightdata")
 
-_TRIGGER = "/datasets/v3/trigger"
-_SNAPSHOT = "/datasets/v3/snapshot/{sid}"
-_PROGRESS = "/datasets/v3/progress/{sid}"
+_FILTER = "/datasets/filter"
+_DOWNLOAD = "/datasets/snapshots/{sid}/download"
 
 
 class LiveBrightdataClient(BrightdataClient):
@@ -57,14 +58,9 @@ class LiveBrightdataClient(BrightdataClient):
             },
             timeout=60.0,
         )
-        # Deep profile enrichment goes through Apify when a key is set — Brightdata
-        # only gives name+title+recent school, too thin for the rubric. Falls back
-        # to the Brightdata profile dataset when no Apify key is configured.
-        self._apify = None
-        if settings.apify_api_key:
-            from ..enrich import ApifyEnricher
-            self._apify = ApifyEnricher(settings)
-            logger.info("profile enrichment: Apify (actor=%s)", settings.apify_profile_actor)
+        # Full profiles fetched by a company filter are cached here, so the
+        # pipeline's per-candidate profile() lookup is free (no second query).
+        self._cache: dict[str, Profile] = {}
 
     # --- transport -------------------------------------------------------
 
@@ -83,147 +79,101 @@ class LiveBrightdataClient(BrightdataClient):
             raise BrightdataError(f"{where}: {resp.status_code} {resp.text[:160]}")
         resp.raise_for_status()
 
-    def _trigger(self, dataset_id: str, rows: list[dict]) -> str:
-        """Start a collect-by-URL collection; return its snapshot id."""
-        params = {"dataset_id": dataset_id, "include_errors": "true"}
-        logger.debug("brightdata.trigger dataset=%s rows=%d", dataset_id, len(rows))
-        resp = self._http.post(_TRIGGER, params=params, json=rows)
-        self._raise_for_status(resp, "trigger")
-        sid = resp.json().get("snapshot_id")
+    def _filter(self, field: str, value: str, records_limit: int,
+                *, operator: str = "=") -> list[dict]:
+        """Filter the profiles dataset (field/operator/value) → resident records.
+
+        Starts the async filter job, then polls its snapshot download until ready."""
+        body = {
+            "dataset_id": self._s.bd_dataset_profile,
+            "records_limit": records_limit,
+            "filter": {"name": field, "operator": operator, "value": value},
+        }
+        logger.debug("brightdata.filter %s %s %r limit=%d", field, operator, value,
+                     records_limit)
+        resp = self._http.post(_FILTER, json=body)
+        self._raise_for_status(resp, "filter")
+        sid = (resp.json() or {}).get("snapshot_id")
         if not sid:
-            raise BrightdataError(f"trigger returned no snapshot_id: {resp.text[:200]}")
-        logger.debug("brightdata.trigger -> snapshot=%s", sid)
-        return sid
+            raise BrightdataError(f"filter returned no snapshot_id: {resp.text[:200]}")
+        return self._download(sid)
 
-    def _poll(self, sid: str) -> list[dict]:
-        """Poll a snapshot until ready, then return its records."""
+    def _download(self, sid: str) -> list[dict]:
+        """Poll a filter snapshot's download until it's built, then return records.
+
+        While building, the endpoint replies either ``202 Snapshot is building`` or
+        ``400 {"error":"Snapshot not ready"}`` — both mean *retry*, not a failure."""
         deadline = time.monotonic() + self._s.bd_poll_timeout
-        waited = 0.0
         while True:
-            resp = self._http.get(_PROGRESS.format(sid=sid))
-            self._raise_for_status(resp, "progress")
-            status = resp.json().get("status", "unknown")
-            if status == "ready":
-                break
-            if status == "failed":
-                raise BrightdataError(f"snapshot {sid} failed")
-            if time.monotonic() >= deadline:
-                raise BrightdataError(
-                    f"snapshot {sid} not ready after {self._s.bd_poll_timeout:.0f}s "
-                    f"(last status={status})"
-                )
-            logger.debug("brightdata.poll snapshot=%s status=%s (waited %.0fs)",
-                        sid, status, waited)
-            time.sleep(self._s.bd_poll_interval)
-            waited += self._s.bd_poll_interval
-
-        data = self._http.get(_SNAPSHOT.format(sid=sid), params={"format": "json"})
-        self._raise_for_status(data, "snapshot")
-        records = data.json()
-        if isinstance(records, dict):  # some datasets wrap rows under a key
-            records = records.get("data") or records.get("results") or []
-        logger.debug("brightdata.snapshot=%s ready -> %d records", sid, len(records))
-        return records
-
-    def _collect(self, dataset_id: str, rows: list[dict]) -> list[dict]:
-        return self._poll(self._trigger(dataset_id, rows))
+            resp = self._http.get(_DOWNLOAD.format(sid=sid), params={"format": "json"})
+            body = resp.text
+            building = resp.status_code == 202 or (
+                resp.status_code >= 400
+                and ("not ready" in body.lower() or "building" in body.lower())
+            )
+            if building:
+                if time.monotonic() >= deadline:
+                    raise BrightdataError(
+                        f"filter snapshot {sid} not ready after "
+                        f"{self._s.bd_poll_timeout:.0f}s")
+                logger.debug("brightdata.filter snapshot=%s building ...", sid)
+                time.sleep(self._s.bd_poll_interval)
+                continue
+            self._raise_for_status(resp, "snapshot-download")
+            records = resp.json()
+            if isinstance(records, dict):  # some shapes wrap rows under a key
+                records = records.get("data") or records.get("results") or []
+            logger.debug("brightdata.filter snapshot=%s -> %d records", sid, len(records))
+            return records
 
     # --- interface -------------------------------------------------------
 
     def company_employees(self, company: str) -> list[EmployeeRef]:
-        """Source candidates from a company via the company-info dataset.
-
-        Brightdata's standard LinkedIn datasets expose no "discover employees by
-        company" scraper, but the company page record carries an ``employees``
-        list (the members LinkedIn surfaces publicly — a sample, not the full
-        headcount). We collect the company by URL and return those members as
-        shallow refs; the pipeline enriches + scores each for role fit.
-
-        ``company`` should be a LinkedIn company URL; a bare name is slugified
-        best-effort (and may resolve to the wrong org — prefer the URL)."""
-        url = _to_company_url(company)
-        if "linkedin.com/company/" not in (company or ""):
-            logger.warning("[company_employees] %r is a bare name; guessing %s — "
-                           "this may resolve to the wrong org. Seed the LinkedIn "
-                           "company URL to be sure.", company, url)
-        records = self._collect(self._s.bd_dataset_company_people, [{"url": url}])
-        if not records:
-            raise BrightdataNotFound(f"no LinkedIn company page for {company!r} ({url})")
-        rec = records[0]
-        company_name = rec.get("name") or company
+        """Every resident profile at ``company`` (a LinkedIn company URL), via the
+        Filter API on ``current_company_company_id``. Each record is a *full*
+        profile, so we cache them for the pipeline's later ``profile()`` calls and
+        return shallow refs for the surfacing stage."""
+        slug = _company_slug(company)
+        if not slug:
+            raise BrightdataNotFound(f"no company slug in {company!r}")
+        records = self._filter(
+            "current_company_company_id", slug, self._s.bd_company_records_limit
+        )
         seen: set[str] = set()
         employees: list[EmployeeRef] = []
-        for m in rec.get("employees") or []:
-            link = _clean_profile_url(m.get("link"))
-            if not link or "/in/" not in link or link in seen:
+        for r in records:
+            prof = _to_profile(r, r.get("url") or "")
+            url = _clean_profile_url(prof.linkedin_url)
+            if not url or url in seen:
                 continue
-            seen.add(link)
+            seen.add(url)
+            self._cache[url] = prof  # serve the later profile() call from memory
             employees.append(EmployeeRef(
-                linkedin_url=link,
-                full_name=m.get("title", ""),
-                current_company=company_name,
+                linkedin_url=url, full_name=prof.full_name, headline=prof.headline,
+                current_title=prof.current_title, current_company=prof.current_company,
+                location=prof.location,
             ))
-        logger.debug("brightdata.company_employees %r (%s) -> %d listed members "
-                    "(of %s on LinkedIn)", company, url, len(employees),
-                    rec.get("employees_in_linkedin"))
+        logger.debug("brightdata.company_employees slug=%s -> %d profiles",
+                     slug, len(employees))
         if not employees:
-            raise BrightdataNotFound(
-                f"no public members listed on {company_name!r} company page ({url})"
-            )
+            raise BrightdataNotFound(f"no resident profiles at company {slug!r}")
         return employees
 
     def profile(self, linkedin_url: str) -> Profile:
-        # Deep details from Apify (rich experience/skills/education the rubric
-        # needs). If Apify is unavailable for an account-level reason (run quota,
-        # un-approved actor, server error), don't fail the whole run — log it
-        # loudly and fall back to the Brightdata profile (shallow). Full
-        # enrichment resumes automatically once Apify is restored/upgraded.
-        if self._apify is not None:
-            try:
-                return self._apify.profile(linkedin_url)
-            except BrightdataNotFound:
-                raise  # genuinely no profile → skip this candidate
-            except Exception as exc:
-                logger.warning(
-                    "apify enrichment unavailable (%s) — falling back to the "
-                    "Brightdata profile (shallow; upgrade Apify for full detail)",
-                    str(exc)[:180],
-                )
-        record = self._collect_profile(linkedin_url)
-        prof = _to_profile(record, linkedin_url)
+        """Full profile for a URL — from the company-filter cache when available,
+        else a single-profile filter on ``linkedin_id``."""
+        cached = self._cache.get(_clean_profile_url(linkedin_url))
+        if cached is not None:
+            return cached
+        slug = _profile_slug(linkedin_url)
+        records = self._filter("linkedin_id", slug, 1) if slug else []
+        if not records:
+            raise BrightdataNotFound(linkedin_url)
+        prof = _to_profile(records[0], linkedin_url)
+        self._cache[_clean_profile_url(linkedin_url)] = prof
         logger.debug("brightdata.profile %s -> %d experiences, %d skills",
-                    linkedin_url, len(prof.experiences), len(prof.skills))
+                     linkedin_url, len(prof.experiences), len(prof.skills))
         return prof
-
-    def _collect_profile(self, url: str) -> dict:
-        """Scrape one profile, re-scraping if Brightdata returns a *stub*.
-
-        A stub carries identity (name + current company) but no profile body —
-        no role, summary, or experience. It's what LinkedIn's anti-bot / authwall
-        returns when the live page can't be fully rendered, and Brightdata bills
-        it like a success. Retrying often clears a transient block; if it doesn't,
-        we raise ``BrightdataNotFound`` so the lead is skipped rather than scored
-        as an (empty, guaranteed-to-DROP) profile. The record's field *names* and
-        any warning/error codes are logged — never the profile text (C4)."""
-        attempts = 1 + max(0, self._s.bd_stub_retries)
-        for attempt in range(1, attempts + 1):
-            records = self._collect(self._s.bd_dataset_profile, [{"url": url}])
-            if not records:
-                raise BrightdataNotFound(url)
-            rec = records[0]
-            if not _is_stub_profile(rec):
-                return rec
-            logger.warning(
-                "brightdata.profile STUB url=%s attempt=%d/%d keys=%s flags=%s",
-                url, attempt, attempts, sorted(rec.keys()),
-                _record_flags(rec) or "none",
-            )
-            if attempt < attempts:
-                time.sleep(self._s.bd_poll_interval)
-        raise BrightdataNotFound(
-            f"{url}: profile body empty after {attempts} attempt(s) — LinkedIn "
-            f"returned no public experience/about (blocked or private)"
-        )
 
     def network(self, profile: Profile, limit: int = 10) -> list[EmployeeRef]:
         """Network-expansion edge via LinkedIn's ``people_also_viewed`` — the one
@@ -255,48 +205,40 @@ class LiveBrightdataClient(BrightdataClient):
         return peers
 
 
-# --- record health (detect blocked / partial scrapes) --------------------
-# Brightdata bills every returned row, including the stubs LinkedIn's authwall
-# yields. We detect those so they're retried + skipped, not scored as empty.
-
-_FLAG_KEYS = ("warning", "warning_code", "error", "error_code")
-
-
-def _record_flags(r: dict) -> dict:
-    """Brightdata's warning/error markers on a record. Codes, not profile text —
-    safe to log under C4, and the fastest signal for *why* a scrape came back thin."""
-    return {k: r[k] for k in _FLAG_KEYS if r.get(k)}
-
-
-def _is_stub_profile(r: dict) -> bool:
-    """True when a record has no profile *body* — no role, summary, or experience.
-    Identity fields (name/current_company) alone don't count: those survive an
-    authwall hit while the substance we score on does not."""
-    has_body = bool(
-        _first(r, "about", "summary", "bio")
-        or _first(r, "position", "current_position", "current_title", "title")
-        or r.get("experience") or r.get("experiences")
-    )
-    return not has_body
-
-
 # --- field mapping (Brightdata records → our wire types) -----------------
 # Real records carry many more fields than we model and use varied key names;
 # map defensively and ignore the rest.
 
-def _to_company_url(company: str) -> str:
-    """A LinkedIn company URL for ``company``: passed through if already a company
-    URL, else slugified from the name (best-effort — may hit the wrong org)."""
+def _company_slug(company: str) -> str:
+    """The ``current_company_company_id`` to filter on, from a company URL/name.
+    ``linkedin.com/company/vapi-ai/`` → ``vapi-ai``; a bare name is slugified."""
     c = (company or "").strip()
     if "linkedin.com/company/" in c:
-        return c if c.startswith("http") else f"https://{c}"
-    slug = re.sub(r"[^a-z0-9]+", "-", c.lower()).strip("-")
-    return f"https://www.linkedin.com/company/{slug}"
+        return c.split("linkedin.com/company/", 1)[1].split("?")[0].strip("/").split("/")[0]
+    return re.sub(r"[^a-z0-9]+", "-", c.lower()).strip("-")
+
+
+def _profile_slug(url: str) -> str:
+    """The ``linkedin_id`` to filter on, from a profile URL: ``…/in/<slug>`` → slug."""
+    u = (url or "").split("?")[0].rstrip("/")
+    return u.split("/in/", 1)[1].split("/")[0] if "/in/" in u else ""
 
 
 def _clean_profile_url(link: str | None) -> str:
     """Strip LinkedIn's tracking query (``?trk=org-employees``) off a member link."""
     return (link or "").split("?")[0].strip()
+
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _strip_html(s: str) -> str:
+    """LinkedIn descriptions arrive as HTML (``<br>``, ``&quot;`` …). Turn them into
+    plain text the scorer can read: tags → spaces, entities unescaped, collapsed."""
+    if not s:
+        return ""
+    text = html.unescape(_TAG.sub(" ", s))
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _first(d: dict, *keys: str, default=""):
@@ -305,6 +247,14 @@ def _first(d: dict, *keys: str, default=""):
         if v:
             return v
     return default
+
+
+def _end_or_none(value):
+    """A current role's end is null or the literal ``"Present"``; normalize both to
+    None so ``previous_companies`` treats the role as ongoing, not past."""
+    if not value or str(value).strip().lower() in ("present", "current"):
+        return None
+    return value
 
 
 def _company_name(value) -> str:
@@ -336,12 +286,26 @@ def _to_profile(r: dict, fallback_url: str) -> Profile:
     for e in (r.get("experience") or r.get("experiences") or []):
         if not isinstance(e, dict):
             continue
-        experiences.append(Experience(
-            company=_company_name(_first(e, "company", "company_name", default={})),
-            title=_first(e, "title", "position"),
-            start=_first(e, "start_date", "start", default=None) or None,
-            end=_first(e, "end_date", "end", default=None) or None,
-        ))
+        company = _company_name(_first(e, "company", "company_name", default={}))
+        cid = e.get("company_id")
+        company_url = f"https://www.linkedin.com/company/{cid}" if cid else ""
+        # An entry is either a single role, or a company with nested ``positions``
+        # (multiple roles). Flatten to one Experience per role so each role's dates
+        # and description (what they did — our only skills signal) are preserved.
+        positions = e.get("positions") if isinstance(e.get("positions"), list) else None
+        rows = positions or [e]
+        for pos in rows:
+            if not isinstance(pos, dict):
+                continue
+            experiences.append(Experience(
+                company=company,
+                company_url=company_url,
+                title=_first(pos, "title", "position"),
+                start=_first(pos, "start_date", "start", default=None) or None,
+                end=_end_or_none(_first(pos, "end_date", "end", default="")),
+                description=_strip_html(_first(pos, "description", "description_html",
+                                               "summary", default="")),
+            ))
     skills = r.get("skills") or []
     if skills and isinstance(skills[0], dict):
         skills = [s.get("name", "") for s in skills if s.get("name")]

@@ -57,6 +57,7 @@ def surface_triage(profile: Profile, icp: dict) -> TriageResult:
         profile.headline, profile.about, profile.current_title,
         profile.current_company, *[e.title for e in profile.experiences],
         *[e.company for e in profile.experiences],
+        *[e.description for e in profile.experiences],
     ])).lower()
 
     off = next((m for m in _OFF_ROLE if m.strip() in text), None)

@@ -31,6 +31,10 @@ class Experience:
     start: str | None = None
     end: str | None = None  # None ⇒ current role
     company_url: str = ""    # LinkedIn company URL, when the source provides it
+    # What they actually did in the role (LinkedIn ``description``, HTML stripped).
+    # The dataset has no ``skills`` field, so this free text is the signal the
+    # scorer + triage mine for skills/domain.
+    description: str = ""
 
 
 @dataclass
@@ -56,16 +60,21 @@ class Profile:
     people_also_viewed: list[dict] = field(default_factory=list)
 
     def previous_companies(self) -> list[str]:
-        """Companies other than the current one — the prev-employer fan-out seeds.
-        Prefer each role's company URL (unambiguous to scan) over its bare name."""
-        out: list[str] = []
-        seen: set[str] = set()
+        """Companies the person no longer works at — the prev-employer fan-out seeds.
+        A company is *current* if any role there is ongoing (``end is None``); those
+        are excluded. Prefer each company's URL (unambiguous to scan) over its name."""
+        current: set[str] = set()
+        order: list[str] = []
+        seed_of: dict[str, str] = {}
         for exp in self.experiences:
-            if exp.end is None or not exp.company:
+            if not exp.company:
                 continue
-            seed = exp.company_url or exp.company
             key = (exp.company_url or exp.company).strip().lower()
-            if key and key not in seen:
-                seen.add(key)
-                out.append(seed)
-        return out
+            if not key:
+                continue
+            if key not in seed_of:
+                seed_of[key] = exp.company_url or exp.company
+                order.append(key)
+            if exp.end is None:
+                current.add(key)
+        return [seed_of[k] for k in order if k not in current]

@@ -43,10 +43,11 @@ SCORE_SYSTEM = (
     "Then give an overall 0-100 `score` (weighted by the criteria), a one-line "
     "`summary` a recruiter can skim, and a verdict ('fit' or 'drop'). Ground "
     "everything in the profile — never invent schools, employers, or skills. "
-    "LinkedIn data is uneven: a profile may have an empty `skills` list or sparse "
-    "`experiences` yet still describe its stack and domain in `about`/`headline` — "
-    "infer skill and domain criteria from that free text too, not just the "
-    "structured fields. A 'drop' must state what is missing."
+    "There is NO `skills` field: infer skills and domain from the free text — the "
+    "`about`, the `headline`, and especially each experience's `description` (what "
+    "they actually built/did) and titles. Treat that text as first-class evidence "
+    "for skill/domain criteria, not just the structured fields. A 'drop' must state "
+    "what is missing."
 )
 
 
@@ -59,8 +60,12 @@ def _profile_view(profile: Profile) -> dict:
         "location": profile.location,
         "skills": profile.skills,
         "education": profile.education,
+        # ``description`` is what they actually did — the dataset has no skills
+        # field, so this is where the scorer infers skills/domain from. Capped to
+        # keep the prompt lean.
         "experiences": [
-            {"company": e.company, "title": e.title, "start": e.start, "end": e.end}
+            {"company": e.company, "title": e.title, "start": e.start, "end": e.end,
+             "description": (e.description or "")[:400]}
             for e in profile.experiences
         ],
     }

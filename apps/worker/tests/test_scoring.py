@@ -27,14 +27,12 @@ def _profile(slug: str):
 def _settings(mode="mock") -> Settings:
     return Settings(
         mode=mode, brightdata_api_key="", brightdata_base_url="x",
-        bd_dataset_profile="p", bd_dataset_company_people="c",
-        bd_poll_timeout=240.0, bd_poll_interval=5.0, bd_stub_retries=1,
+        bd_dataset_profile="p", bd_company_records_limit=25,
+        bd_poll_timeout=240.0, bd_poll_interval=5.0,
         recent_joiner_window_days=90, max_expansion_depth=2,
         max_leads_per_run=50, max_scrapes_per_run=100,
         live_max_companies=1, live_max_depth=0, live_max_leads=8, autoplan=False,
         expand_min_score=40, expand_network=False, cross_run_dedup=False,
-        apify_api_key="", apify_base_url="x",
-        apify_profile_actor="a", apify_profile_mode="m",
         scrape_max_attempts=4, scrape_base_delay=0.5,
         anthropic_api_key="", planner_model="m", scorer_model="m",
         drafter_model="m", triage_model="m", webpy_base_url="x", service_token="x",

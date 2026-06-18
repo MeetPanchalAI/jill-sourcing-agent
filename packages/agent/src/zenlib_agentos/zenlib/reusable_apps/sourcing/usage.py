@@ -4,7 +4,7 @@ We don't depend on a billing API (Brightdata/Instantly usage endpoints may not b
 available); instead we derive cost from the work the run actually did, which is
 exactly what Temporal/the run counters already track:
 
-  * Brightdata scrapes  = company scans + profile enrichments + network lookups
+  * Brightdata records  = full profiles pulled via the Filter API (one per candidate)
   * Claude calls        = one score per candidate + one draft per channel
   * Outreach            = invites/emails actually sent
 
@@ -19,8 +19,7 @@ from django.db.models import Sum
 from .models import OutreachDraft, SourcingRun
 
 DEFAULT_PRICES = {
-    "scrape_cents": 0.5,   # Brightdata per company-page record
-    "apify_cents": 0.4,    # Apify per profile (harvestapi "no email" mode: $4 / 1k)
+    "scrape_cents": 0.8,   # Brightdata Filter API per full profile record (~$8/1k)
     "llm_cents": 1.0,      # Claude per score/draft call
     "invite_cents": 0.0,   # LinkedIn invite via the connected account (free)
     "email_cents": 0.1,    # Instantly per email
@@ -41,13 +40,11 @@ def role_cost(role) -> dict:
     )
     scanned, budget = agg["scanned"] or 0, agg["budget"] or 0
     drafted = agg["drafted"] or 0
-    # The two-layer model, aggregated across *every* workflow run so cost grows as
-    # the iterative crawl expands:
-    #   Brightdata scrapes = one company-page scrape per company scanned.
-    #   Apify enrichments  = one deep-profile fetch per candidate evaluated.
-    #   Claude calls       = one score per candidate + one per draft (triage is free).
-    scrapes = scanned
-    enrichments = budget
+    # Aggregated across *every* workflow run, so cost grows as the iterative crawl
+    # expands. Brightdata Filter API returns full profiles, so one delivered record
+    # per candidate evaluated is both the surfacing and the deep detail (no separate
+    # enrichment). Claude = one score per candidate + one per draft (triage is free).
+    scrapes = budget
     llm_calls = budget + drafted
 
     sent = OutreachDraft.objects.filter(role=role, status=OutreachDraft.Status.SENT)
@@ -55,14 +52,13 @@ def role_cost(role) -> dict:
     emails = sent.filter(channel=OutreachDraft.Channel.EMAIL).count()
 
     bd = scrapes * p["scrape_cents"]
-    ap = enrichments * p["apify_cents"]
     llm = llm_calls * p["llm_cents"]
     out = invites * p["invite_cents"] + emails * p["email_cents"]
-    total = bd + ap + llm + out
+    total = bd + llm + out
     return {
-        "scrapes": scrapes, "enrichments": enrichments, "llm_calls": llm_calls,
+        "scrapes": scrapes, "llm_calls": llm_calls,
         "invites_sent": invites, "emails_sent": emails,
-        "brightdata_cents": round(bd, 2), "apify_cents": round(ap, 2),
+        "brightdata_cents": round(bd, 2),
         "llm_cents": round(llm, 2), "outreach_cents": round(out, 2),
         "total_cents": round(total, 2), "total_usd": round(total / 100, 2),
     }

@@ -31,6 +31,7 @@ def _blob(profile: Profile) -> str:
         profile.about,
         *[e.title for e in profile.experiences],
         *[e.company for e in profile.experiences],
+        *[e.description for e in profile.experiences],
     ]
     return " ".join(p for p in parts if p).lower()
 

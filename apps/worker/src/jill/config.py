@@ -37,20 +37,15 @@ class Settings:
     # --- Brightdata ---
     brightdata_api_key: str
     brightdata_base_url: str
-    # Dataset ids on the Brightdata Web Scraper API (v3). Defaults are the public
-    # LinkedIn datasets; override per-account via env if yours differ.
-    bd_dataset_profile: str          # LinkedIn people profile (deep), by URL — collect-by-URL
-    # Company info dataset (collect-by-URL). Its record carries an ``employees``
-    # list (the members LinkedIn surfaces on the company page) which we use to
-    # source candidates from a company — no separate "discover employees" scraper
-    # (the standard LinkedIn datasets don't expose one). Seed a company *URL*
-    # (linkedin.com/company/<slug>); a bare name is slugified best-effort but may
-    # resolve to the wrong org, so prefer the URL.
-    bd_dataset_company_people: str
-    bd_poll_timeout: float           # max seconds to wait for an async snapshot
+    # The LinkedIn People-Profiles dataset, queried via the **Dataset Filter API**
+    # (not live scraping): filtering by ``current_company_company_id`` returns the
+    # full resident profiles (experience/education/about) of a company's people in
+    # one job — surfacing *and* deep detail at once. Filtering by ``linkedin_id``
+    # fetches a single profile. Override per-account via env if yours differs.
+    bd_dataset_profile: str
+    bd_company_records_limit: int    # max profiles to pull per company filter (cost cap)
+    bd_poll_timeout: float           # max seconds to wait for an async filter snapshot
     bd_poll_interval: float          # seconds between snapshot polls
-    bd_stub_retries: int             # extra re-scrapes when a profile comes back a
-                                     # stub (name only, no body — LinkedIn blocked it)
 
     # --- pipeline knobs (the bounds that keep the crawl finite) ---
     recent_joiner_window_days: int
@@ -75,20 +70,9 @@ class Settings:
     # (rescans allowed — a re-run re-scans its seeds and re-evaluates) — a later
     # optimization once the iterative flow is dialed in. Enable: JILL_CROSS_RUN_DEDUP=1.
     cross_run_dedup: bool
-    # Also expand through a candidate's network. On by default (the mock + Brightdata
-    # paths surface a shared-company / people_also_viewed cohort); harmless under
-    # Apify enrichment, which returns no connections, so it's simply a no-op there.
-    # Set JILL_EXPAND_NETWORK=0 to force prev-employer-only expansion.
+    # Also expand through a candidate's network (people_also_viewed). On by default;
+    # set JILL_EXPAND_NETWORK=0 to force prev-employer-only expansion.
     expand_network: bool
-
-    # --- Apify (deep profile enrichment) ---
-    # Brightdata surfaces a company's employees (name + title) but not the deep
-    # profile (experience/skills/education) the rubric scores on. So profiles are
-    # enriched via an Apify LinkedIn-profile actor instead. Key-gated like live mode.
-    apify_api_key: str
-    apify_base_url: str
-    apify_profile_actor: str
-    apify_profile_mode: str
 
     # --- scrape retry/backoff ---
     scrape_max_attempts: int
@@ -121,12 +105,9 @@ def get_settings() -> Settings:
         bd_dataset_profile=os.environ.get(
             "BRIGHTDATA_DATASET_PROFILE", "gd_l1viktl72bvl7bjuj0"
         ),
-        bd_dataset_company_people=os.environ.get(
-            "BRIGHTDATA_DATASET_COMPANY_PEOPLE", "gd_l1vikfnt1wgvvqz95w"
-        ),
-        bd_poll_timeout=_float("BRIGHTDATA_POLL_TIMEOUT", 240.0),
+        bd_company_records_limit=_int("BRIGHTDATA_COMPANY_LIMIT", 25),
+        bd_poll_timeout=_float("BRIGHTDATA_POLL_TIMEOUT", 300.0),
         bd_poll_interval=_float("BRIGHTDATA_POLL_INTERVAL", 5.0),
-        bd_stub_retries=_int("BRIGHTDATA_STUB_RETRIES", 1),
         recent_joiner_window_days=_int("RECENT_JOINER_WINDOW_DAYS", 90),
         max_expansion_depth=_int("MAX_EXPANSION_DEPTH", 2),
         max_leads_per_run=_int("MAX_LEADS_PER_RUN", 50),
@@ -138,15 +119,6 @@ def get_settings() -> Settings:
         expand_min_score=_int("JILL_EXPAND_MIN_SCORE", 40),
         cross_run_dedup=os.environ.get("JILL_CROSS_RUN_DEDUP", "0") == "1",
         expand_network=os.environ.get("JILL_EXPAND_NETWORK", "1") == "1",
-        # Accept APIFY_TOKEN (Apify's own env name) or APIFY_API_KEY.
-        apify_api_key=os.environ.get("APIFY_TOKEN") or os.environ.get("APIFY_API_KEY", ""),
-        apify_base_url=os.environ.get("APIFY_BASE_URL", "https://api.apify.com"),
-        apify_profile_actor=os.environ.get(
-            "APIFY_PROFILE_ACTOR", "harvestapi~linkedin-profile-scraper"
-        ),
-        apify_profile_mode=os.environ.get(
-            "APIFY_PROFILE_MODE", "Profile details no email ($4 per 1k)"
-        ),
         scrape_max_attempts=_int("SCRAPE_MAX_ATTEMPTS", 4),
         scrape_base_delay=_float("SCRAPE_BASE_DELAY", 0.5),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),

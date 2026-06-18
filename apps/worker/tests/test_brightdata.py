@@ -21,14 +21,12 @@ from jill.config import Settings
 def _mock_settings(**over) -> Settings:
     base = dict(
         mode="mock", brightdata_api_key="", brightdata_base_url="x",
-        bd_dataset_profile="p", bd_dataset_company_people="c",
-        bd_poll_timeout=240.0, bd_poll_interval=5.0, bd_stub_retries=1,
+        bd_dataset_profile="p", bd_company_records_limit=25,
+        bd_poll_timeout=240.0, bd_poll_interval=5.0,
         recent_joiner_window_days=90, max_expansion_depth=2,
         max_leads_per_run=50, max_scrapes_per_run=100,
         live_max_companies=1, live_max_depth=0, live_max_leads=8, autoplan=False,
         expand_min_score=40, expand_network=False, cross_run_dedup=False,
-        apify_api_key="", apify_base_url="x",
-        apify_profile_actor="a", apify_profile_mode="m",
         scrape_max_attempts=4, scrape_base_delay=0.5,
         anthropic_api_key="", planner_model="m", scorer_model="m",
         drafter_model="m", triage_model="m",
@@ -143,35 +141,62 @@ def test_no_raw_pii_in_logs(caplog):
         assert secret not in text
 
 
-# --- stub / blocked-scrape detection (live mapping) -------------------------
+# --- live Filter-API mapping ------------------------------------------------
 
 
-def test_stub_profile_detected():
-    """name + current_company but no body = LinkedIn authwall stub, must be caught."""
-    from jill.brightdata.live import _is_stub_profile
-    stub = {"name": "Frank M", "current_company": {"name": "Punch Financial"}}
-    assert _is_stub_profile(stub) is True
-    # Any one body field present means it's a real profile.
-    assert _is_stub_profile({**stub, "about": "Voice AI engineer"}) is False
-    assert _is_stub_profile({**stub, "position": "Staff Engineer"}) is False
-    assert _is_stub_profile({**stub, "experience": [{"title": "Eng"}]}) is False
+def test_company_and_profile_slug_extraction():
+    from jill.brightdata.live import _company_slug, _profile_slug
+    assert _company_slug("https://www.linkedin.com/company/vapi-ai/") == "vapi-ai"
+    assert _company_slug("https://cl.linkedin.com/company/smuchile?trk=x") == "smuchile"
+    assert _profile_slug("https://cl.linkedin.com/in/frank-pet-123?trk=y") == "frank-pet-123"
+    assert _profile_slug("https://www.linkedin.com/company/vapi-ai") == ""
 
 
-def test_record_flags_surfaces_warning_codes():
-    from jill.brightdata.live import _record_flags
-    assert _record_flags({"name": "X", "warning_code": "dead_page"}) == {
-        "warning_code": "dead_page"
-    }
-    assert _record_flags({"name": "X"}) == {}  # nothing to surface on a clean row
-
-
-def test_to_profile_accepts_experiences_plural():
-    """Schema-drift guard: the dataset key may be ``experiences`` not ``experience``."""
+def test_to_profile_maps_company_url_and_experience():
+    """Filter-API record → Profile: experience (+ company URL for prev-employer
+    expansion), current company URL (for cross-run promotion), people_also_viewed."""
     from jill.brightdata.live import _to_profile
     rec = {
         "name": "Dana", "position": "Voice AI Engineer",
-        "experiences": [{"company": "Vapi", "title": "Founding Engineer"}],
+        "current_company": {"name": "Vapi", "company_id": "vapi-ai",
+                            "link": "https://www.linkedin.com/company/vapi-ai?trk=x"},
+        "experiences": [{"company": "Retell", "company_id": "retellai",
+                         "title": "Eng", "end_date": "2024"}],
+        "people_also_viewed": [{"profile_link": "https://linkedin.com/in/x"}],
     }
     prof = _to_profile(rec, "https://linkedin.com/in/dana")
-    assert len(prof.experiences) == 1
-    assert prof.experiences[0].company == "Vapi"
+    assert prof.current_company == "Vapi"
+    assert prof.current_company_url == "https://www.linkedin.com/company/vapi-ai"
+    assert prof.experiences[0].company == "Retell"
+    assert prof.experiences[0].company_url == "https://www.linkedin.com/company/retellai"
+    assert prof.previous_companies() == ["https://www.linkedin.com/company/retellai"]
+    assert len(prof.people_also_viewed) == 1
+
+
+def test_to_profile_flattens_positions_and_captures_descriptions():
+    """experience[] nests positions[]; flatten to one role each, HTML-strip the
+    description (the only skills signal), and exclude the current company from
+    previous_companies (it has an ongoing 'Present' role)."""
+    from jill.brightdata.live import _to_profile
+    rec = {
+        "name": "Johan",
+        "current_company": {"name": "BEM", "company_id": "bemfhui"},
+        "experience": [
+            {"company": "BEM", "company_id": "bemfhui", "positions": [
+                {"title": "Deputy Head", "start_date": "Apr 2026", "end_date": "Present"},
+                {"title": "Staff", "start_date": "Apr 2025", "end_date": "Mar 2026"}]},
+            {"company": "Days of Law", "company_id": "daysoflawcareer",
+             "title": "Vice Head", "start_date": "Apr 2025", "end_date": "Jan 2026"},
+            {"company": "Teater", "positions": [
+                {"title": "Director", "end_date": "May 2023",
+                 "description_html": "Directed actors &amp; audio.<br>1,000+ audience."}]},
+        ],
+    }
+    prof = _to_profile(rec, "https://linkedin.com/in/johan")
+    assert len(prof.experiences) == 4                      # 2 + 1 + 1 flattened
+    director = next(e for e in prof.experiences if e.title == "Director")
+    assert director.description == "Directed actors & audio. 1,000+ audience."  # HTML stripped
+    # BEM is current (a 'Present' role) → excluded; Days (by URL) + Teater (by name) remain.
+    assert prof.previous_companies() == [
+        "https://www.linkedin.com/company/daysoflawcareer", "Teater",
+    ]
