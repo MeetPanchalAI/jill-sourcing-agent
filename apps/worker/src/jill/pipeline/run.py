@@ -99,6 +99,8 @@ def run_sourcing(
     max_companies: int = 50,
     planner=None,
     expand_min_score: int = 0,
+    expand_network: bool = True,
+    dedup_cross_run: bool = False,
 ) -> RunResult:
     as_of = as_of or datetime.now(UTC).date()
     # Profile-URL seeds are sourced directly (real fetch → score → draft); company
@@ -109,14 +111,19 @@ def run_sourcing(
     candidates: deque = deque()
     seen_companies: set[str] = set()
     seen_candidates: set[int] = set()
-    # Cross-run idempotency: never re-scan a company or re-score a candidate that an
-    # earlier workflow already handled (the new run builds on the prior, not over it).
-    scanned_keys: set[str] = {
-        _company_key(c) for c in getattr(client, "scanned_companies", lambda _r: [])(role_id)
-    }
-    evaluated: set[int] = set(
-        getattr(client, "evaluated_candidate_ids", lambda _r: set())(role_id)
-    )
+    # Cross-run idempotency (opt-in): skip companies/candidates an earlier workflow
+    # already handled. OFF by default — rescans are allowed, so a re-run re-scans
+    # its seeds and re-evaluates. (We still *record* scanned companies for when this
+    # optimization is turned on later.)
+    if dedup_cross_run:
+        scanned_keys: set[str] = {
+            _company_key(c) for c in getattr(client, "scanned_companies", lambda _r: [])(role_id)
+        }
+        evaluated: set[int] = set(
+            getattr(client, "evaluated_candidate_ids", lambda _r: set())(role_id)
+        )
+    else:
+        scanned_keys, evaluated = set(), set()
     r = RunResult(status="running")
     budget_hit = False
 
@@ -236,13 +243,13 @@ def run_sourcing(
             depth=depth, max_depth=max_depth,
             budget=Budget(max_leads=max_leads, max_scrapes=max_companies * 5),
             fetched_at=datetime.now(UTC).isoformat(),
-            expand_min_score=expand_min_score,
+            expand_min_score=expand_min_score, expand_network=expand_network,
         )
         r.evaluated += 1
         evaluated.add(cid)
+        r.drafted += out.drafted  # drafts are staged for every shortlisted candidate
         if out.is_fit:
             r.fit += 1
-            r.drafted += out.drafted
         if out.surfaced:
             r.surfaced += 1
             # Grow the frontier from anyone who passed triage (recall), not only fits.

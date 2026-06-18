@@ -1,19 +1,19 @@
-"""Live Brightdata client — real LinkedIn data via the Web Scraper API (v3).
+"""Live LinkedIn data client.
 
-Brightdata scraping is **asynchronous**: you *trigger* a dataset collection, get a
-``snapshot_id``, then poll until the snapshot is ``ready`` and download the records.
-This client implements that trigger → poll → download loop for the three operations
-the pipeline needs:
+Brightdata is the *surfacing* layer (trigger → poll → download a snapshot):
 
-* ``profile(url)``            → deep profile, by LinkedIn URL  (people-profiles dataset)
-* ``company_employees(name)`` → people discovered at a company (discover dataset)
-* ``network(profile)``        → shared-company cohort (Brightdata exposes no raw
-                                connections — same approximation the mock uses)
+* ``company_employees(url)`` → the members LinkedIn lists on a company page.
+* ``network(profile)``       → a related-people cohort via ``people_also_viewed``.
 
-Dataset ids and discover field come from ``Settings`` (env-overridable). Every
-request, snapshot status, and record count is logged so a live run is fully
-observable from the console. Real scrapes take seconds-to-minutes and cost money,
-so the portal keeps live runs tightly bounded (see ``config.live_max_*``).
+Profiles are *enriched* through Apify (``jill.enrich``) when an ``APIFY_TOKEN`` is
+set — Brightdata returns only name/title/recent-school, too thin for the rubric.
+If Apify is unavailable (run quota, un-approved actor), ``profile()`` falls back to
+the Brightdata profile dataset (shallow) so a run still completes.
+
+Dataset ids come from ``Settings`` (env-overridable). Every request, snapshot
+status, and record count is logged (identifiers + counts, never profile text, C4);
+real scrapes are slow and cost money, so live runs are tightly bounded
+(see ``config.live_max_*``).
 """
 
 from __future__ import annotations
@@ -57,6 +57,14 @@ class LiveBrightdataClient(BrightdataClient):
             },
             timeout=60.0,
         )
+        # Deep profile enrichment goes through Apify when a key is set — Brightdata
+        # only gives name+title+recent school, too thin for the rubric. Falls back
+        # to the Brightdata profile dataset when no Apify key is configured.
+        self._apify = None
+        if settings.apify_api_key:
+            from ..enrich import ApifyEnricher
+            self._apify = ApifyEnricher(settings)
+            logger.info("profile enrichment: Apify (actor=%s)", settings.apify_profile_actor)
 
     # --- transport -------------------------------------------------------
 
@@ -75,14 +83,10 @@ class LiveBrightdataClient(BrightdataClient):
             raise BrightdataError(f"{where}: {resp.status_code} {resp.text[:160]}")
         resp.raise_for_status()
 
-    def _trigger(self, dataset_id: str, rows: list[dict], discover: bool) -> str:
-        """Start a collection; return its snapshot id."""
+    def _trigger(self, dataset_id: str, rows: list[dict]) -> str:
+        """Start a collect-by-URL collection; return its snapshot id."""
         params = {"dataset_id": dataset_id, "include_errors": "true"}
-        if discover:
-            params["type"] = "discover_new"
-            params["discover_by"] = self._s.bd_discover_by
-        logger.debug("brightdata.trigger dataset=%s discover=%s rows=%d",
-                    dataset_id, discover, len(rows))
+        logger.debug("brightdata.trigger dataset=%s rows=%d", dataset_id, len(rows))
         resp = self._http.post(_TRIGGER, params=params, json=rows)
         self._raise_for_status(resp, "trigger")
         sid = resp.json().get("snapshot_id")
@@ -121,8 +125,8 @@ class LiveBrightdataClient(BrightdataClient):
         logger.debug("brightdata.snapshot=%s ready -> %d records", sid, len(records))
         return records
 
-    def _collect(self, dataset_id: str, rows: list[dict], *, discover: bool) -> list[dict]:
-        return self._poll(self._trigger(dataset_id, rows, discover))
+    def _collect(self, dataset_id: str, rows: list[dict]) -> list[dict]:
+        return self._poll(self._trigger(dataset_id, rows))
 
     # --- interface -------------------------------------------------------
 
@@ -142,9 +146,7 @@ class LiveBrightdataClient(BrightdataClient):
             logger.warning("[company_employees] %r is a bare name; guessing %s — "
                            "this may resolve to the wrong org. Seed the LinkedIn "
                            "company URL to be sure.", company, url)
-        records = self._collect(
-            self._s.bd_dataset_company_people, [{"url": url}], discover=False
-        )
+        records = self._collect(self._s.bd_dataset_company_people, [{"url": url}])
         if not records:
             raise BrightdataNotFound(f"no LinkedIn company page for {company!r} ({url})")
         rec = records[0]
@@ -171,6 +173,22 @@ class LiveBrightdataClient(BrightdataClient):
         return employees
 
     def profile(self, linkedin_url: str) -> Profile:
+        # Deep details from Apify (rich experience/skills/education the rubric
+        # needs). If Apify is unavailable for an account-level reason (run quota,
+        # un-approved actor, server error), don't fail the whole run — log it
+        # loudly and fall back to the Brightdata profile (shallow). Full
+        # enrichment resumes automatically once Apify is restored/upgraded.
+        if self._apify is not None:
+            try:
+                return self._apify.profile(linkedin_url)
+            except BrightdataNotFound:
+                raise  # genuinely no profile → skip this candidate
+            except Exception as exc:
+                logger.warning(
+                    "apify enrichment unavailable (%s) — falling back to the "
+                    "Brightdata profile (shallow; upgrade Apify for full detail)",
+                    str(exc)[:180],
+                )
         record = self._collect_profile(linkedin_url)
         prof = _to_profile(record, linkedin_url)
         logger.debug("brightdata.profile %s -> %d experiences, %d skills",
@@ -189,9 +207,7 @@ class LiveBrightdataClient(BrightdataClient):
         any warning/error codes are logged — never the profile text (C4)."""
         attempts = 1 + max(0, self._s.bd_stub_retries)
         for attempt in range(1, attempts + 1):
-            records = self._collect(
-                self._s.bd_dataset_profile, [{"url": url}], discover=False
-            )
+            records = self._collect(self._s.bd_dataset_profile, [{"url": url}])
             if not records:
                 raise BrightdataNotFound(url)
             rec = records[0]
@@ -313,18 +329,6 @@ def _company_url_of(cc) -> str:
         return link
     cid = cc.get("company_id")
     return f"https://www.linkedin.com/company/{cid}" if cid else ""
-
-
-def _to_employee(r: dict) -> EmployeeRef:
-    return EmployeeRef(
-        linkedin_url=_first(r, "url", "input_url", "profile_url"),
-        full_name=_first(r, "name", "full_name"),
-        headline=_first(r, "headline", "position", "title"),
-        current_title=_first(r, "position", "current_title", "title"),
-        current_company=_company_name(_first(r, "current_company", "company", default={})),
-        started_at=_first(r, "current_company_join_date", "started_at", default=None) or None,
-        location=_first(r, "location", "city", "country"),
-    )
 
 
 def _to_profile(r: dict, fallback_url: str) -> Profile:

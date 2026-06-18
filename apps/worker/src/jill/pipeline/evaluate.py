@@ -49,6 +49,7 @@ def evaluate_lead(
     max_depth: int,
     budget: Budget,
     expand_min_score: int = 0,
+    expand_network: bool = True,
     fetched_at: str,
 ) -> EvalOutcome:
     try:
@@ -116,7 +117,7 @@ def evaluate_lead(
         exp = expand_lead(
             client, brightdata, role_id=role_id, run_id=run_id,
             lead_candidate_id=candidate_id, lead_profile=profile, depth=depth,
-            max_depth=max_depth, budget=budget,
+            max_depth=max_depth, budget=budget, expand_network=expand_network,
         )
         if exp.prev_employer_companies or exp.network_leads:
             logger.info("  |    expand  +%d prev-employer compan%s, +%d network peer%s  ->  frontier",
@@ -125,18 +126,23 @@ def evaluate_lead(
                         len(exp.network_leads),
                         "" if len(exp.network_leads) == 1 else "s")
 
-    # Draft outreach only for high-confidence fits — don't auto-message the whole list.
-    drafts: list = []
-    if outcome.is_fit:
-        ctx = build_context(
-            profile, role_title=role_title, reasons=outcome.result.reasons,
-            source_kind="recent_joiner",
-        )
-        drafts = draft_outreach(
-            client, drafter, candidate_id=candidate_id, role_id=role_id, ctx=ctx,
-        )
-        logger.info("  |    draft   %d invite%s staged for approval",
-                    len(drafts), "" if len(drafts) == 1 else "s")
+    # Every candidate that lands on the board (i.e. got scored — fit or drop,
+    # triage-kept or not) gets outreach drafts in both channels, so the Outreach
+    # panel always mirrors the Leads list, for every role. Deleting a candidate
+    # cascades to their drafts, keeping the two panels in sync. (Candidates with no
+    # profile returned earlier as ``skipped`` and never reach here, so they're not
+    # on the board and get no draft.)
+    ctx = build_context(
+        profile, role_title=role_title,
+        reasons=(outcome.result.reasons
+                 or ([outcome.result.summary] if outcome.result.summary else [])),
+        source_kind="recent_joiner",
+    )
+    drafts = draft_outreach(
+        client, drafter, candidate_id=candidate_id, role_id=role_id, ctx=ctx,
+    )
+    logger.info("  |    draft   %d invite%s staged — linkedin + email",
+                len(drafts), "" if len(drafts) == 1 else "s")
 
     return EvalOutcome(
         is_fit=outcome.is_fit, drafted=len(drafts), skipped=False, surfaced=triage.keep,

@@ -69,6 +69,7 @@ def expand_lead(
     depth: int,
     max_depth: int,
     budget: Budget,
+    expand_network: bool = True,
 ) -> ExpandResult:
     result = ExpandResult([], [], 0, budget_reached=False, skipped_depth=False,
                           network_leads=[])
@@ -90,8 +91,8 @@ def expand_lead(
         )
         result.prev_employer_companies.append(company)
 
-    # --- network → new candidate leads ---
-    if budget.can_scrape():
+    # --- network → new candidate leads (config-gated) ---
+    if expand_network and budget.can_scrape():
         budget.take_scrape()
         try:
             peers = brightdata.network(lead_profile)

@@ -30,6 +30,7 @@ class Experience:
     title: str
     start: str | None = None
     end: str | None = None  # None ⇒ current role
+    company_url: str = ""    # LinkedIn company URL, when the source provides it
 
 
 @dataclass
@@ -55,9 +56,16 @@ class Profile:
     people_also_viewed: list[dict] = field(default_factory=list)
 
     def previous_companies(self) -> list[str]:
-        """Companies other than the current one — the prev-employer fan-out seeds."""
+        """Companies other than the current one — the prev-employer fan-out seeds.
+        Prefer each role's company URL (unambiguous to scan) over its bare name."""
         out: list[str] = []
+        seen: set[str] = set()
         for exp in self.experiences:
-            if exp.end is not None and exp.company and exp.company not in out:
-                out.append(exp.company)
+            if exp.end is None or not exp.company:
+                continue
+            seed = exp.company_url or exp.company
+            key = (exp.company_url or exp.company).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(seed)
         return out

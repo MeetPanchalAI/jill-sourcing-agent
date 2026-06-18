@@ -341,7 +341,9 @@ def run_sourcing_inprocess(role: Role) -> SourcingRun:
             DjangoSourcingClient(), brightdata, scorer, drafter,
             role_id=role.id, run_id=run.id, role_title=role.title,
             icp=role.icp, seed_companies=seeds, as_of=date.today(),
-            planner=planner, expand_min_score=settings.expand_min_score, **bounds,
+            planner=planner, expand_min_score=settings.expand_min_score,
+            expand_network=settings.expand_network,
+            dedup_cross_run=settings.cross_run_dedup, **bounds,
         )
         logger.info("SOURCING DONE   run=#%s status=%s | scanned=%d found=%d "
                     "fit=%d drafted=%d", run.id, result.status, result.scanned,

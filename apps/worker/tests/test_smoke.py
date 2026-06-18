@@ -33,7 +33,10 @@ def test_demo_yields_fit_leads_with_drafts():
     client, r = _run()
     assert r.status == "completed"
     assert r.fit >= 2                 # ≥2 de-duplicated fit leads
-    assert r.drafted == r.fit * 2     # linkedin + email per fit, idempotent
+    # Outreach mirrors the Leads board: every scored candidate gets drafts in both
+    # channels (fit or drop), so drafted == 2 × (candidates with a scorecard).
+    assert r.drafted == 2 * len(client.scores)
+    assert r.surfaced >= r.fit        # the shortlist is at least the fits
     # every fit candidate has a persisted scorecard
     fit_scores = [s for s in client.scores.values() if s["verdict"] == "fit"]
     assert len(fit_scores) == r.fit
