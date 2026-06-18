@@ -87,3 +87,14 @@ class FakeWebPy:
         row = {**self.runs.get(run_id, {"id": run_id}), **fields}
         self.runs[run_id] = row
         return Upserted(row, created=run_id not in self.runs)
+
+    # Cross-run state — in-memory tests run a single workflow, so there's nothing
+    # already evaluated/scanned. (The Django client reads it from the DB.)
+    def evaluated_candidate_ids(self, role_id: int) -> set[int]:
+        return set()
+
+    def scanned_companies(self, role_id: int) -> list[str]:
+        return []
+
+    def mark_company_scanned(self, target_id: int) -> None:
+        pass

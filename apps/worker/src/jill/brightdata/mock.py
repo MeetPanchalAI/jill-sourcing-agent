@@ -41,11 +41,13 @@ def _load(path: Path) -> dict:
 
 
 class MockBrightdataClient(BrightdataClient):
+    network_method = "shared_company"  # fixtures model a shared-company cohort
+
     def company_employees(self, company: str) -> list[EmployeeRef]:
         slug = _slug(company)
         data = _load(_FIXTURES / "companies" / f"{slug}.json")
         employees = [EmployeeRef(**e) for e in data.get("employees", [])]
-        logger.info("brightdata.company_employees %s -> %d employees",
+        logger.debug("brightdata.company_employees %s -> %d employees",
                     slug, len(employees))
         return employees
 
@@ -54,7 +56,7 @@ class MockBrightdataClient(BrightdataClient):
         data = _load(_FIXTURES / "profiles" / f"{slug}.json")
         exps = [Experience(**e) for e in data.pop("experiences", [])]
         prof = Profile(experiences=exps, **data)
-        logger.info("brightdata.profile %s -> %d experiences, %d skills",
+        logger.debug("brightdata.profile %s -> %d experiences, %d skills",
                     slug, len(prof.experiences), len(prof.skills))
         return prof
 
@@ -76,6 +78,6 @@ class MockBrightdataClient(BrightdataClient):
                     break
             if len(cohort) >= limit:
                 break
-        logger.info("brightdata.network %s -> %d peers (shared_company)",
+        logger.debug("brightdata.network %s -> %d peers (shared_company)",
                     _slug(profile.linkedin_url), len(cohort))
         return cohort

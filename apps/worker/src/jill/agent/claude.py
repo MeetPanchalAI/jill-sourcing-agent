@@ -12,8 +12,15 @@ from pydantic import ValidationError
 
 from ..brightdata.types import Profile
 from ..config import Settings
-from .prompts import DRAFT_SYSTEM, SCORE_SYSTEM, build_draft_user, build_score_user
-from .schemas import OutreachResult, ScoreResult
+from .prompts import (
+    DRAFT_SYSTEM,
+    PLAN_SYSTEM,
+    SCORE_SYSTEM,
+    build_draft_user,
+    build_plan_user,
+    build_score_user,
+)
+from .schemas import OutreachResult, ScoreResult, SeedPlan
 
 logger = logging.getLogger("jill.agent")
 
@@ -39,6 +46,23 @@ def _parse_retry(client, *, model, system, user, output_format, max_tokens=1024)
                            output_format.__name__, attempt + 1, exc)
     raise RuntimeError(f"{output_format.__name__} failed after retries: {last}") \
         from last
+
+
+class ClaudePlanner:
+    """Proposes seed companies for a role from its title + ICP (P1)."""
+
+    def __init__(self, settings: Settings):
+        if not settings.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY required for live planning")
+        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self.model_id = settings.planner_model
+
+    def propose_seeds(self, role_title: str, icp: dict, n: int = 3,
+                      exclude: list[str] | None = None) -> SeedPlan:
+        return _parse_retry(
+            self._client, model=self.model_id, system=PLAN_SYSTEM,
+            user=build_plan_user(role_title, icp, n, exclude), output_format=SeedPlan,
+        )
 
 
 class ClaudeScorer:

@@ -38,7 +38,8 @@ def _texts(profile: Profile) -> dict:
     titles = [profile.current_title, *(e.title for e in profile.experiences)]
     companies = [profile.current_company, *(e.company for e in profile.experiences)]
     schools = [str(e.get("school", "")) for e in profile.education]
-    full = " ".join([*profile.skills, *titles, *companies, profile.headline]).lower()
+    full = " ".join([*profile.skills, *titles, *companies,
+                     profile.headline, profile.about]).lower()
     return {
         "titles": " ".join(t for t in titles if t).lower(),
         "schools": [s for s in schools if s],

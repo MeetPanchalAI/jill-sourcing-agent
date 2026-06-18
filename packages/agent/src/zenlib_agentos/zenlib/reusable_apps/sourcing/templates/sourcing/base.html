@@ -81,6 +81,11 @@
     .pill.failed{background:#f7ebe6;color:#a23}
     .counters{font-variant-numeric:tabular-nums;color:var(--muted)}
 
+    /* Placeholders are example hints, not values — render them clearly muted so
+       they read as prompts, and clear them the moment the field is focused. */
+    input::placeholder,textarea::placeholder{color:#aba59a;opacity:1;font-weight:400;
+      transition:opacity .12s ease}
+    input:focus::placeholder,textarea:focus::placeholder{opacity:0}
     button,.btn{font:inherit;border:1px solid var(--line);background:var(--paper);border-radius:10px;
                 padding:6px 13px;cursor:pointer;font-weight:500}
     button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -122,12 +127,19 @@
     .brief-h{display:flex;align-items:center;gap:7px;font-size:11px;text-transform:uppercase;
              letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:10px}
     .brief-h .ic{font-size:13px}
+    .brief-note{margin:0 0 11px;color:var(--muted);font-size:12px;line-height:1.45;max-width:36ch}
+    .brief-note b{color:var(--accent-700);font-weight:700;font-variant-numeric:tabular-nums}
     .chip.seed{background:var(--accent-soft);border-color:#f0d5c4;color:var(--accent-700);font-weight:600}
-    .chip .dep{color:var(--muted);font-size:11px;margin-left:2px}
-    .chip.key{border-color:#e3cabd;font-weight:600}
-    .wt{display:inline-grid;place-items:center;min-width:17px;height:17px;border-radius:50%;
-        background:#cfc8b8;color:#fff;font-size:10.5px;font-weight:700;margin-left:5px}
-    .chip.key .wt{background:var(--accent)}
+    .chip .tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700;
+               opacity:.65;margin-left:5px}
+    .brief-sub{margin:9px 0 0;color:var(--muted);font-size:12px;line-height:1.4}
+    /* rubric weight tiers — the header carries the weight, so chips stay badge-free */
+    .tier{margin-top:11px}
+    .tier:first-of-type{margin-top:0}
+    .tier-l{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+            color:var(--muted);font-weight:700}
+    .tier .chips{margin-top:1px}
+    .chip.key{background:var(--accent-soft);border-color:#f0d5c4;color:var(--accent-700);font-weight:600}
     @media(max-width:820px){
       .brief{grid-template-columns:1fr}
       .brief > div{border-left:none;border-top:1px solid var(--line);padding:10px 0}
@@ -171,6 +183,41 @@
     .sheet-subj{margin-top:16px;font-weight:600;color:var(--ink);font-size:15px}
     .sheet-read{margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.6;
                 color:#3a3730;overflow:auto}
+
+    /* processing overlay — shown while a synchronous action (e.g. sourcing) runs */
+    .overlay{position:fixed;inset:0;background:rgba(247,245,239,.8);backdrop-filter:blur(2px);
+             display:none;place-items:center;z-index:60}
+    .overlay.on{display:grid}
+    .overlay .box{background:var(--paper);border:1px solid var(--line);border-radius:16px;
+                  padding:26px 32px;box-shadow:0 10px 50px rgba(30,30,20,.14);
+                  text-align:center;max-width:360px}
+    .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);
+             border-top-color:var(--accent);animation:spin .8s linear infinite;margin:0 auto 15px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .overlay .ttl{font-family:var(--serif);font-size:18px;font-weight:600;margin-bottom:5px}
+    .overlay .stp{color:var(--muted);font-size:13.5px;line-height:1.5}
+    button[disabled]{opacity:.6;cursor:default}
+
+    /* lead card: crisp hover, subtle corner delete, cross-highlight states */
+    .lead{position:relative;transition:opacity .16s ease,box-shadow .16s ease,
+          border-color .16s ease,transform .16s ease}
+    .lead:hover{box-shadow:0 4px 16px rgba(30,30,20,.08)}
+    .lead.dim{opacity:.34;filter:saturate(.45)}
+    .lead.hl{border-color:var(--accent);box-shadow:0 3px 18px rgba(224,112,60,.16)}
+    .del-form{position:absolute;top:12px;right:14px;margin:0;z-index:1;opacity:.35;
+              transition:opacity .14s ease}
+    .lead:hover .del-form,.del-form:focus-within{opacity:1}
+    .del{border:none;background:none;color:#b0a99c;cursor:pointer;font-size:14px;
+         line-height:1;padding:5px 8px;border-radius:8px;transition:all .12s ease}
+    .del:hover{color:#b3261e;background:#faecea}
+    /* clickable company links (chip + card) for cross-highlighting */
+    .mon-chip{cursor:pointer;user-select:none}
+    .mon-chip:hover{box-shadow:0 1px 5px rgba(224,112,60,.22)}
+    .mon-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .mon-chip.active .tag{opacity:.9}
+    .co-link{cursor:pointer;border-bottom:1px dashed transparent;transition:border-color .12s}
+    .co-link:hover{border-bottom-color:var(--muted)}
+    .co-link.on{color:var(--accent-700);font-weight:600}
   </style>
 </head>
 <body>
@@ -192,6 +239,14 @@
     </aside>
     <main class="content">{% block body %}{% endblock %}</main>
   </div>
+  <div class="overlay" id="overlay">
+    <div class="box">
+      <div class="spinner"></div>
+      <div class="ttl">Sourcing in progress…</div>
+      <div class="stp">Monitoring companies → scoring candidates → drafting outreach.
+        This can take a few seconds in live mode.</div>
+    </div>
+  </div>
   <script>
     // Open/close the review drawer (native <dialog>). No framework.
     document.addEventListener('click', function (e) {
@@ -202,6 +257,22 @@
       if (close) { var dl = close.closest('dialog'); if (dl) dl.close(); return; }
       if (e.target.tagName === 'DIALOG') e.target.close();  // click backdrop to close
     });
+
+    // Show the processing overlay when a long-running form (data-loading) submits,
+    // and disable its submit button so it can't be double-clicked.
+    document.addEventListener('submit', function (e) {
+      if (!e.target.matches('[data-loading]')) return;
+      var ov = document.getElementById('overlay');
+      if (ov) ov.classList.add('on');
+      var btn = e.target.querySelector('button[type=submit], button:not([type])');
+      if (btn) setTimeout(function () { btn.disabled = true; }, 0);
+    });
+    // If the user returns via the back button (bfcache), hide the overlay again.
+    window.addEventListener('pageshow', function () {
+      var ov = document.getElementById('overlay');
+      if (ov) ov.classList.remove('on');
+    });
   </script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

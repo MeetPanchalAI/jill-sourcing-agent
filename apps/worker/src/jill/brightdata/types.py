@@ -39,13 +39,20 @@ class Profile:
     linkedin_url: str
     full_name: str = ""
     headline: str = ""
+    about: str = ""  # the profile's free-text summary — richest fit signal
     location: str = ""
     current_company: str = ""
+    # The current company's LinkedIn URL — the canonical key used to promote a
+    # surviving candidate's company into the next workflow's seed set.
+    current_company_url: str = ""
     current_title: str = ""
     started_at: str | None = None
     experiences: list[Experience] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)
     education: list[dict] = field(default_factory=list)
+    # LinkedIn's "people also viewed" — the network-expansion edge. Each entry:
+    # {profile_link, name, about, location}. Often the only growth signal we get.
+    people_also_viewed: list[dict] = field(default_factory=list)
 
     def previous_companies(self) -> list[str]:
         """Companies other than the current one — the prev-employer fan-out seeds."""

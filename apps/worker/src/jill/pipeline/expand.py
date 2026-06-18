@@ -123,7 +123,7 @@ def expand_lead(
                 kind="network",
                 from_candidate=lead_candidate_id,
                 depth=child_depth,
-                method="shared_company",
+                method=getattr(brightdata, "network_method", "network"),
             )
             if edge.created:
                 result.network_edges_created += 1

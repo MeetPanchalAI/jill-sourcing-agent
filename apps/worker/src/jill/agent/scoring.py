@@ -28,6 +28,7 @@ def _blob(profile: Profile) -> str:
         *profile.skills,
         profile.current_title,
         profile.headline,
+        profile.about,
         *[e.title for e in profile.experiences],
         *[e.company for e in profile.experiences],
     ]

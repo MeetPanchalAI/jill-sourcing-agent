@@ -1,4 +1,5 @@
 {% extends "sourcing/base.html" %}
+{% load sourcing_extras %}
 {% block title %}{{ role.title }} — Jill{% endblock %}
 {% block head %}{% if auto_refresh %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block body %}
@@ -7,15 +8,27 @@
       <h1 style="margin-bottom:2px">{{ role.title }}</h1>
       <p class="sub">Ranked leads with rubric breakdown &amp; provenance — outreach awaits your approval.</p>
     </div>
-    <form method="post" action="/ui/sourcing/roles/{{ role.id }}/source/?tenant={{ tenant.id }}">
+    <form method="post" data-loading action="/ui/sourcing/roles/{{ role.id }}/source/?tenant={{ tenant.id }}"
+          style="display:flex;gap:8px;align-items:center">
       {% csrf_token %}
+      <input name="company" placeholder="{% if seeds %}Add a seed company — linkedin.com/company/… URL{% else %}Seed company — linkedin.com/company/… URL{% endif %}"
+             class="btn" style="width:360px">
       <button class="primary" style="padding:9px 16px">▶ Start sourcing</button>
     </form>
   </div>
+  {% if not seeds %}
+    <div class="card" style="border-color:#f0d5c4;background:var(--accent-soft)">
+      <b>Nothing to source yet.</b> Add a <b>seed company</b>
+      (<code>linkedin.com/company/…</code>, comma-separated for several) — Jill
+      surfaces its employees, scores them, and expands through their previous
+      employers and network. Each run then grows from the companies your kept
+      candidates belong to (see <b>Monitoring</b>).
+    </div>
+  {% endif %}
 
   <div class="tiles">
     {% for label, value, tone in summary %}
-      <div class="card tile"><div class="l">{{ label }}</div><div class="n {{ tone }}">{{ value }}</div></div>
+      <div class="card tile"><div class="l">{{ label }}</div><div class="n {{ tone }}" data-kpi="{{ label|lower }}">{{ value }}</div></div>
     {% endfor %}
   </div>
 
@@ -57,22 +70,36 @@
     </div>
   </div>
 
-  <!-- Search brief: what Jill is sourcing for -->
+  <!-- Search brief: what Jill is sourcing for. One short caption per column,
+       tooltips on every chip, so nothing on screen needs prior context. -->
   <div class="card brief">
     <div>
       <div class="brief-h"><span class="ic">🎯</span> Monitoring</div>
-      <div class="chips">
-        {% for t in targets %}<span class="chip {% if t.depth %}prov{% else %}seed{% endif %}">{{ t.name }}{% if t.depth %}<span class="dep">d{{ t.depth }}</span>{% endif %}</span>
-        {% empty %}<span class="muted">Companies appear here once sourcing runs.</span>{% endfor %}
+      <p class="brief-note">Companies on your list — <b>these seed the next run</b>.
+        Curate the list and this set follows; already-scanned ones are skipped.</p>
+      <div class="chips" data-monitoring>
+        {% for m in monitoring %}<span class="chip seed mon-chip" data-co="{{ m.name }}" title="{{ m.count }} candidate{{ m.count|pluralize }} from {{ m.name|pretty_name }} — click to highlight them">{{ m.name|pretty_name }}<span class="tag">{{ m.count }}</span></span>
+        {% empty %}<span class="muted" data-mon-empty>Companies appear here once candidates are on the list.</span>{% endfor %}
       </div>
     </div>
     <div>
       <div class="brief-h"><span class="ic">🧩</span> Must-have</div>
-      <div class="chips">{% for s in skills %}<span class="chip met">{{ s }}</span>{% empty %}<span class="muted">—</span>{% endfor %}</div>
+      <p class="brief-note">Every lead must have all of these.</p>
+      <div class="chips">{% for s in skills %}<span class="chip met" title="Required skill — leads missing it are dropped">{{ s }}</span>{% empty %}<span class="muted">—</span>{% endfor %}</div>
     </div>
     <div>
       <div class="brief-h"><span class="ic">⚖️</span> Scoring rubric</div>
-      <div class="chips">{% for c in rubric %}<span class="chip {% if c.weight >= 2 %}key{% endif %}" title="type: {{ c.type }} · weight {{ c.weight }}">{{ c.name }}<span class="wt">{{ c.weight }}</span></span>{% endfor %}</div>
+      <p class="brief-note">Signals Jill weighs to rank each lead by fit.</p>
+      {% if rubric_key %}
+        <div class="tier"><span class="tier-l">Counts double</span>
+          <div class="chips">{% for c in rubric_key %}<span class="chip key" title="{{ c.name }} — weighted ×{{ c.weight }} when scoring fit">{{ c.name }}</span>{% endfor %}</div>
+        </div>
+      {% endif %}
+      {% if rubric_std %}
+        <div class="tier"><span class="tier-l">Standard weight</span>
+          <div class="chips">{% for c in rubric_std %}<span class="chip" title="{{ c.name }} — standard weight (×{{ c.weight }}) when scoring fit">{{ c.name }}</span>{% endfor %}</div>
+        </div>
+      {% endif %}
     </div>
   </div>
 
@@ -96,17 +123,24 @@
     </div>
   {% endif %}
 
-  <h3>Leads ({{ leads|length }})</h3>
+  <h3>Leads (<span data-leads-count>{{ leads|length }}</span>)</h3>
   {% for lead in leads %}
-    <div class="card">
+    <div class="card lead" data-cand="{{ lead.candidate.id }}"
+         data-co="{{ lead.candidate.current_company }}"
+         data-co-label="{{ lead.candidate.current_company|pretty_name }}">
+      <form method="post" class="del-form"
+            action="/ui/sourcing/roles/{{ role.id }}/candidates/{{ lead.candidate.id }}/delete/?tenant={{ tenant.id }}">
+        {% csrf_token %}
+        <button class="del" title="Remove this candidate and their drafts" aria-label="Remove">✕</button>
+      </form>
       <div class="row" style="align-items:flex-start">
         <span class="score {{ lead.score.verdict }}">{{ lead.score.score }}</span>
         <div style="flex:1;min-width:0">
           <div class="row" style="gap:8px">
-            <span class="name">{{ lead.candidate.full_name|default:lead.candidate.linkedin_url }}</span>
+            <span class="name">{{ lead.candidate.full_name|default:lead.candidate.linkedin_url|pretty_name }}</span>
             <span class="verdict {{ lead.score.verdict }}">· {{ lead.score.get_verdict_display }}</span>
           </div>
-          <div class="metaline">{{ lead.candidate.current_title }} @ {{ lead.candidate.current_company }}{% if lead.candidate.location %} · {{ lead.candidate.location }}{% endif %}</div>
+          <div class="metaline">{% if lead.candidate.current_title %}{{ lead.candidate.current_title }} @ {% endif %}{% if lead.candidate.current_company %}<span class="co-link" data-co="{{ lead.candidate.current_company }}" title="Highlight everyone from {{ lead.candidate.current_company|pretty_name }}">{{ lead.candidate.current_company|pretty_name }}</span>{% endif %}{% if lead.candidate.location %} · {{ lead.candidate.location }}{% endif %}</div>
           {% if lead.candidate.headline %}<div class="headline">{{ lead.candidate.headline }}</div>{% endif %}
 
           {% if lead.score.summary %}<div class="summary">{{ lead.score.summary }}</div>{% endif %}
@@ -121,7 +155,7 @@
           {% endif %}
           <div class="chips">
             {% for p in lead.provenance %}
-              <span class="chip {% if p.kind == 'network' %}net{% else %}prov{% endif %}">{{ p.kind }} ← {{ p.from }}{% if p.method %} · {{ p.method }}{% endif %} · d{{ p.depth }}</span>
+              <span class="chip {% if p.kind == 'network' %}net{% else %}prov{% endif %}" title="How Jill found this lead{% if p.depth %} — {{ p.depth }} hop{{ p.depth|pluralize }} out from a seed{% endif %}">{% if p.kind == 'network' %}🔗 via {{ p.from|pretty_name }}{% else %}🏢 at {{ p.from|pretty_name }}{% endif %}{% if p.depth %} · {{ p.depth }} hop{{ p.depth|pluralize }} out{% endif %}</span>
             {% endfor %}
           </div>
         </div>
@@ -137,8 +171,8 @@
     <table>
       <tr><th>Candidate</th><th>Channel</th><th>Message</th><th>Status</th><th></th></tr>
       {% for d in drafts %}
-        <tr>
-          <td>{{ d.candidate.full_name|default:d.candidate.linkedin_url }}</td>
+        <tr data-cand="{{ d.candidate.id }}">
+          <td>{{ d.candidate.full_name|default:d.candidate.linkedin_url|pretty_name }}</td>
           <td>{{ d.get_channel_display }}</td>
           <td>{% include "sourcing/_message_cell.html" with draft=d next_url=request.path %}</td>
           <td><span class="pill {{ d.status }}">{{ d.get_status_display }}</span></td>
@@ -149,4 +183,88 @@
       {% endfor %}
     </table>
   </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var norm = function (s) { return (s || '').trim().toLowerCase(); };
+    var sel = null;  // currently highlighted company (normalized), or null
+
+    // --- cross-highlight (queries live, so it survives DOM rebuilds) ---
+    function apply() {
+      document.querySelectorAll('.mon-chip').forEach(function (c) {
+        c.classList.toggle('active', sel !== null && norm(c.dataset.co) === sel);
+      });
+      document.querySelectorAll('.co-link').forEach(function (c) {
+        c.classList.toggle('on', sel !== null && norm(c.dataset.co) === sel);
+      });
+      document.querySelectorAll('.lead').forEach(function (l) {
+        var match = norm(l.dataset.co) === sel;
+        l.classList.toggle('hl', sel !== null && match);
+        l.classList.toggle('dim', sel !== null && !match);
+      });
+    }
+    function pick(co) { var n = norm(co); sel = (sel === n ? null : n); apply(); }
+
+    // --- Monitoring is a live projection of the visible leads; rebuild it from
+    //     the cards still on the page so it stays in sync after a delete. ---
+    function rebuildMonitoring() {
+      var box = document.querySelector('[data-monitoring]');
+      if (!box) return;
+      var order = [], meta = {};
+      document.querySelectorAll('.lead').forEach(function (l) {
+        var co = (l.dataset.co || '').trim(); if (!co) return;
+        if (!meta[co]) { meta[co] = { n: 0, label: l.dataset.coLabel || co }; order.push(co); }
+        meta[co].n++;
+      });
+      order.sort(function (a, b) { return meta[b].n - meta[a].n || a.toLowerCase().localeCompare(b.toLowerCase()); });
+      if (!order.length) {
+        box.innerHTML = '<span class="muted" data-mon-empty>Companies appear here once candidates are on the list.</span>';
+      } else {
+        box.innerHTML = order.map(function (co) {
+          var m = meta[co], esc = co.replace(/"/g, '&quot;');
+          return '<span class="chip seed mon-chip" data-co="' + esc + '" title="' + m.n +
+            ' candidate(s) from ' + m.label + '">' + m.label + '<span class="tag">' + m.n + '</span></span>';
+        }).join('');
+      }
+      var co = document.querySelector('[data-kpi="companies"]'); if (co) co.textContent = order.length;
+    }
+    function setCount(kpi, n) { var el = document.querySelector('[data-kpi="' + kpi + '"]'); if (el) el.textContent = n; }
+
+    // --- delete in place: no reload, no scroll jump ---
+    function del(form) {
+      var btn = form.querySelector('.del'); if (btn) btn.disabled = true;
+      var token = (form.querySelector('[name=csrfmiddlewaretoken]') || {}).value;
+      fetch(form.action, {
+        method: 'POST', headers: { 'X-Requested-With': 'fetch' },
+        body: new URLSearchParams({ csrfmiddlewaretoken: token || '' }), credentials: 'same-origin',
+      }).then(function (r) {
+        if (!r.ok && r.status !== 204) { if (btn) btn.disabled = false; return; }
+        var card = form.closest('.lead');
+        var cand = card && card.dataset.cand;
+        if (card) card.remove();
+        if (cand) {  // drop their drafts row too, so the board stays coherent
+          document.querySelectorAll('tr[data-cand="' + cand + '"]').forEach(function (tr) { tr.remove(); });
+        }
+        rebuildMonitoring();
+        setCount('leads', document.querySelectorAll('.lead').length);
+        var lc = document.querySelector('[data-leads-count]');
+        if (lc) lc.textContent = document.querySelectorAll('.lead').length;
+        setCount('drafts', document.querySelectorAll('tr[data-cand]').length);
+        if (sel) apply();
+      }).catch(function () { if (btn) btn.disabled = false; });
+    }
+
+    // --- delegated events (robust to rebuilt chips / removed cards) ---
+    document.addEventListener('click', function (e) {
+      var chip = e.target.closest('.mon-chip'); if (chip) { pick(chip.dataset.co); return; }
+      var link = e.target.closest('.co-link'); if (link) { e.preventDefault(); pick(link.dataset.co); return; }
+    });
+    document.addEventListener('submit', function (e) {
+      if (e.target.classList.contains('del-form')) { e.preventDefault(); del(e.target); }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sel !== null) { sel = null; apply(); } });
+  })();
+</script>
 {% endblock %}

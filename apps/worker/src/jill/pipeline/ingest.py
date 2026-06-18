@@ -48,11 +48,64 @@ def ingest_recent_joiners(
     Returns a summary including how many edges were *newly* created (so callers
     can update run counters without double-counting on a re-run)."""
     detection = detect_recent_joiners(employees, as_of, window_days)
+    candidate_ids, leads, edges_created = _persist(
+        client, detection.recent, role_id=role_id, run_id=run_id,
+        from_company_id=from_company_id, depth=depth,
+    )
+    return IngestSummary(
+        company=company,
+        detection=detection,
+        candidate_ids=candidate_ids,
+        edges_created=edges_created,
+        leads=leads,
+    )
 
+
+def ingest_company_members(
+    client,
+    *,
+    role_id: int,
+    run_id: int | None,
+    company: str,
+    from_company_id: int | None,
+    employees: list[EmployeeRef],
+    depth: int = 0,
+) -> IngestSummary:
+    """Persist *every* surfaced company member as a candidate (no recency filter).
+
+    The members a company page lists carry no join date, so recent-joiner
+    detection would exclude them all. This path queues them for role-fit scoring
+    instead — the scorer decides relevance. Records ``recent_joiner`` provenance
+    edges from the company (the only company-origin edge kind)."""
+    candidate_ids, leads, edges_created = _persist(
+        client, employees, role_id=role_id, run_id=run_id,
+        from_company_id=from_company_id, depth=depth,
+    )
+    return IngestSummary(
+        company=company,
+        detection=DetectionResult(total=len(employees)),
+        candidate_ids=candidate_ids,
+        edges_created=edges_created,
+        leads=leads,
+    )
+
+
+def _persist(
+    client,
+    employees: list[EmployeeRef],
+    *,
+    role_id: int,
+    run_id: int | None,
+    from_company_id: int | None,
+    depth: int,
+) -> tuple[list[int], list[dict], int]:
+    """Upsert candidates + ``recent_joiner`` edges for ``employees``, idempotently.
+
+    Returns ``(candidate_ids, leads, edges_created)``."""
     candidate_ids: list[int] = []
     leads: list[dict] = []
     edges_created = 0
-    for emp in detection.recent:
+    for emp in employees:
         cand = client.upsert_candidate(
             linkedin_url=emp.linkedin_url,
             full_name=emp.full_name,
@@ -75,11 +128,4 @@ def ingest_recent_joiners(
         )
         if edge.created:
             edges_created += 1
-
-    return IngestSummary(
-        company=company,
-        detection=detection,
-        candidate_ids=candidate_ids,
-        edges_created=edges_created,
-        leads=leads,
-    )
+    return candidate_ids, leads, edges_created

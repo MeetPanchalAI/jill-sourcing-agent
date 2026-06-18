@@ -36,12 +36,16 @@ def role_cost(role) -> dict:
     # Aggregate the counters in Postgres rather than looping over run rows.
     agg = SourcingRun.objects.filter(role=role).aggregate(
         scanned=Sum("scanned_companies"), budget=Sum("budget_used"),
-        fit=Sum("fit_candidates"), drafted=Sum("drafted"),
+        drafted=Sum("drafted"),
     )
     scanned, budget = agg["scanned"] or 0, agg["budget"] or 0
-    fit, drafted = agg["fit"] or 0, agg["drafted"] or 0
-    scrapes = scanned + budget + fit       # company scan + profile enrich + network
-    llm_calls = budget + drafted           # one score per candidate + one per draft
+    drafted = agg["drafted"] or 0
+    # One company-page scrape per company scanned + one profile scrape per candidate
+    # enriched. Network expansion (people_also_viewed) rides along in the profile
+    # scrape — no extra call — so it's NOT counted. Aggregated across every workflow
+    # run, so cost accumulates as the iterative crawl grows.
+    scrapes = scanned + budget
+    llm_calls = budget + drafted           # one score per candidate + one per draft (triage is free)
 
     sent = OutreachDraft.objects.filter(role=role, status=OutreachDraft.Status.SENT)
     invites = sent.filter(channel=OutreachDraft.Channel.LINKEDIN).count()

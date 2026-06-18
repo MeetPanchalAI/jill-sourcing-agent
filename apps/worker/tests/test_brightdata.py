@@ -21,8 +21,12 @@ from jill.config import Settings
 def _mock_settings(**over) -> Settings:
     base = dict(
         mode="mock", brightdata_api_key="", brightdata_base_url="x",
+        bd_dataset_profile="p", bd_dataset_company_people="c", bd_discover_by="company_name",
+        bd_poll_timeout=240.0, bd_poll_interval=5.0, bd_stub_retries=1,
         recent_joiner_window_days=90, max_expansion_depth=2,
         max_leads_per_run=50, max_scrapes_per_run=100,
+        live_max_companies=1, live_max_depth=0, live_max_leads=8, autoplan=False,
+        expand_min_score=40,
         scrape_max_attempts=4, scrape_base_delay=0.5,
         anthropic_api_key="", planner_model="m", scorer_model="m",
         drafter_model="m", triage_model="m",
@@ -125,7 +129,9 @@ def test_retry_gives_up_after_max_attempts():
 
 def test_no_raw_pii_in_logs(caplog):
     client = MockBrightdataClient()
-    with caplog.at_level(logging.INFO, logger="jill.brightdata"):
+    # Brightdata I/O traces are emitted at DEBUG (INFO is the clean pipeline
+    # narrative); the PII contract still applies wherever they're logged.
+    with caplog.at_level(logging.DEBUG, logger="jill.brightdata"):
         prof = client.profile("https://linkedin.com/in/alice-nguyen")
         client.network(prof, limit=5)
     text = "\n".join(r.getMessage() for r in caplog.records)
@@ -133,3 +139,37 @@ def test_no_raw_pii_in_logs(caplog):
     assert "alice-nguyen" in text  # the url slug is an identifier, allowed
     for secret in ("WebRTC", "UC Berkeley", "Founding Voice AI Engineer"):
         assert secret not in text
+
+
+# --- stub / blocked-scrape detection (live mapping) -------------------------
+
+
+def test_stub_profile_detected():
+    """name + current_company but no body = LinkedIn authwall stub, must be caught."""
+    from jill.brightdata.live import _is_stub_profile
+    stub = {"name": "Frank M", "current_company": {"name": "Punch Financial"}}
+    assert _is_stub_profile(stub) is True
+    # Any one body field present means it's a real profile.
+    assert _is_stub_profile({**stub, "about": "Voice AI engineer"}) is False
+    assert _is_stub_profile({**stub, "position": "Staff Engineer"}) is False
+    assert _is_stub_profile({**stub, "experience": [{"title": "Eng"}]}) is False
+
+
+def test_record_flags_surfaces_warning_codes():
+    from jill.brightdata.live import _record_flags
+    assert _record_flags({"name": "X", "warning_code": "dead_page"}) == {
+        "warning_code": "dead_page"
+    }
+    assert _record_flags({"name": "X"}) == {}  # nothing to surface on a clean row
+
+
+def test_to_profile_accepts_experiences_plural():
+    """Schema-drift guard: the dataset key may be ``experiences`` not ``experience``."""
+    from jill.brightdata.live import _to_profile
+    rec = {
+        "name": "Dana", "position": "Voice AI Engineer",
+        "experiences": [{"company": "Vapi", "title": "Founding Engineer"}],
+    }
+    prof = _to_profile(rec, "https://linkedin.com/in/dana")
+    assert len(prof.experiences) == 1
+    assert prof.experiences[0].company == "Vapi"

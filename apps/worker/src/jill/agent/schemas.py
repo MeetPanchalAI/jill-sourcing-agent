@@ -47,6 +47,29 @@ class ScoreResult(BaseModel):
         return self
 
 
+class SeedCompany(BaseModel):
+    """A company to seed sourcing from — the planner's pick (P1)."""
+
+    name: str = Field(min_length=1, description="Company name.")
+    linkedin_url: str = Field(
+        default="",
+        description="LinkedIn company URL (https://www.linkedin.com/company/<slug>).",
+    )
+    reason: str = Field(default="", description="Why this company fits the role.")
+
+
+class SeedPlan(BaseModel):
+    """The planner's proposed seed companies for a role, best first."""
+
+    companies: list[SeedCompany] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _nonempty(self) -> SeedPlan:
+        if not self.companies:
+            raise ValueError("the planner must propose at least one company")
+        return self
+
+
 class OutreachResult(BaseModel):
     """Produced by the drafter (P6)."""
 
